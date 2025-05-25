@@ -40,6 +40,10 @@ BARK_COARSE_TEMPERATURE = 0.7
 MAX_HISTORY_TURNS = 10
 TIMEZONE_OFFSET_HOURS = 3 # For GMT+3. Use negative values for zones behind UTC, e.g., -5 for EST.
 
+# --- GUI Themes ---
+GUI_THEME_LIGHT = "light"
+GUI_THEME_DARK = "dark"
+
 # --- Default State Blueprints ---
 DEFAULT_USER_STATE = {
     "name": "need to ask name first",
@@ -49,7 +53,8 @@ DEFAULT_USER_STATE = {
     "preferences": {},
     "todos": [], # List of strings, e.g., ["Buy milk", "Call John"]
     "calendar_events": [], # List of dicts, e.g., [{"description": "Meeting with Team", "date": "YYYY-MM-DD", "time": "HH:MM" (optional)}]
-    "birthdays": [] # [{"name": "John Doe", "date": "YYYY-MM-DD"}]
+    "birthdays": [], # [{"name": "John Doe", "date": "YYYY-MM-DD"}]
+    "gui_theme": GUI_THEME_LIGHT # Default to light theme
 }
 
 DEFAULT_ASSISTANT_STATE = {
@@ -69,8 +74,12 @@ DEFAULT_ASSISTANT_STATE = {
 
 # --- Prompt Templates ---
 LANGUAGE_INSTRUCTION_NON_RUSSIAN = "The user is not speaking Russian. Please respond clearly and naturally in English."
-LANGUAGE_INSTRUCTION_RUSSIAN = "The user is speaking Russian. Please respond clearly and naturally in Russian." # Optional, if you want to be explicit
+LANGUAGE_INSTRUCTION_RUSSIAN = "The user is speaking Russian. Please respond clearly and naturally in Russian."
 
+# OLLAMA_PROMPT_TEMPLATE is defined as a raw string here.
+# It will be fully formatted in ollama_handler.py using .format()
+# The placeholders {actual_dark_theme_value} and {actual_light_theme_value}
+# will be replaced with the string values from config.GUI_THEME_DARK and config.GUI_THEME_LIGHT respectively.
 OLLAMA_PROMPT_TEMPLATE = """
 You are Iri-shka, a helpful AI assistant.
 Your goal is to have a natural, helpful conversation and manage your state.
@@ -105,6 +114,7 @@ Instructions for updating state:
 - If the user asks to remember something (like a birthday: name and date), update the "birthdays" list in user_state (e.g., {{"name": "Jane", "date": "YYYY-MM-DD"}}).
 - If the user mentions a task or something to do, update the "todos" list in user_state with strings (e.g., ["Buy groceries", "Finish report"]).
 - If the user mentions an event with a date (and optional time), update the "calendar_events" list in user_state with dictionaries (e.g., [{{"description": "Team Meeting", "date": "YYYY-MM-DD", "time": "HH:MM"}}]).
+- If the user asks to change the application theme (e.g., "change to dark theme", "use light mode", "set dark interface"), update the "gui_theme" field in "updated_user_state" to either "{actual_dark_theme_value}" or "{actual_light_theme_value}".
 - If the user asks a question, provide a concise and helpful answer in "answer_to_user".
 - If you identify a new topic, update "current_topic" in user_state.
 - Maintain your persona as Iri-shka.
