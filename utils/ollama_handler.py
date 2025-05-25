@@ -2,7 +2,7 @@
 import requests
 import json
 from datetime import datetime, timezone, timedelta
-import config # Import config to access OLLAMA_PROMPT_TEMPLATE and theme constants
+import config # Import config to access OLLAMA_PROMPT_TEMPLATE and other constants
 
 # Assuming logger.py is in the same 'utils' directory or accessible
 from logger import get_logger
@@ -10,21 +10,16 @@ from logger import get_logger
 logger = get_logger(__name__)
 
 def check_ollama_server_and_model():
-    """
-    Checks if the Ollama server is reachable and the configured model can respond.
-    Returns: (bool: is_ready, str: status_message_for_log)
-    """
+    # ... (this function remains the same) ...
     payload = {
         "model": config.OLLAMA_MODEL_NAME,
         "prompt": config.OLLAMA_PING_PROMPT,
         "stream": False
     }
     logger.info(f"Pinging Ollama server with model {config.OLLAMA_MODEL_NAME} at {config.OLLAMA_API_URL}...")
-
     try:
         response = requests.post(config.OLLAMA_API_URL, json=payload, timeout=config.OLLAMA_PING_TIMEOUT)
         response.raise_for_status() 
-
         response_data = response.json()
         if response_data and response_data.get("response"):
             actual_response_content = response_data.get("response", "").strip().lower()
@@ -35,7 +30,6 @@ def check_ollama_server_and_model():
             msg = f"Ping to {config.OLLAMA_MODEL_NAME} received HTTP OK, but response content was unexpected or empty."
             logger.warning(msg)
             return False, msg
-
     except requests.exceptions.Timeout:
         msg = f"Timeout ({config.OLLAMA_PING_TIMEOUT}s) connecting to Ollama at {config.OLLAMA_API_URL}."
         logger.error(msg, exc_info=False)
@@ -48,14 +42,10 @@ def check_ollama_server_and_model():
         error_detail = f"HTTP Error {e.response.status_code}"
         try:
             error_content = e.response.json()
-            if 'error' in error_content:
-                 error_detail += f" - {error_content['error']}"
-            elif 'detail' in error_content:
-                 error_detail += f" - {error_content['detail']}"
-            else:
-                error_detail += f" - (Raw: {e.response.text[:100]})"
-        except json.JSONDecodeError:
-            error_detail += f" - (Non-JSON error response: {e.response.text[:100]})"
+            if 'error' in error_content: error_detail += f" - {error_content['error']}"
+            elif 'detail' in error_content: error_detail += f" - {error_content['detail']}"
+            else: error_detail += f" - (Raw: {e.response.text[:100]})"
+        except json.JSONDecodeError: error_detail += f" - (Non-JSON error response: {e.response.text[:100]})"
         msg = f"Ollama HTTPError during ping: {error_detail}"
         logger.error(msg, exc_info=False)
         return False, msg
@@ -67,6 +57,7 @@ def check_ollama_server_and_model():
         msg = f"Unexpected Error during Ollama ping: {str(e)}"
         logger.error(msg, exc_info=True)
         return False, msg
+
 
 def call_ollama_for_chat_response(transcribed_text, chat_history, user_state, assistant_state,
                                   language_instruction_for_llm="", gui_callbacks=None):
@@ -82,7 +73,7 @@ def call_ollama_for_chat_response(transcribed_text, chat_history, user_state, as
     now_in_target_timezone = datetime.now(target_timezone)
     current_time_string = now_in_target_timezone.strftime("%A, %Y-%m-%d %H:%M:%S")
 
-    # Format the template here, including the theme values from config
+    # ALL formatting happens here
     prompt_for_ollama = config.OLLAMA_PROMPT_TEMPLATE.format(
         language_instruction=language_instruction_for_llm,
         current_time_string=current_time_string,
@@ -91,8 +82,11 @@ def call_ollama_for_chat_response(transcribed_text, chat_history, user_state, as
         user_state_string=json.dumps(user_state, indent=2, ensure_ascii=False),
         assistant_state_string=json.dumps(assistant_state, indent=2, ensure_ascii=False),
         last_transcribed_text=transcribed_text,
-        actual_dark_theme_value=config.GUI_THEME_DARK,   # Pass the actual string "dark"
-        actual_light_theme_value=config.GUI_THEME_LIGHT # Pass the actual string "light"
+        actual_dark_theme_value=config.GUI_THEME_DARK,
+        actual_light_theme_value=config.GUI_THEME_LIGHT,
+        min_font_size_value=config.MIN_CHAT_FONT_SIZE,
+        max_font_size_value=config.MAX_CHAT_FONT_SIZE,
+        default_font_size_value=config.DEFAULT_CHAT_FONT_SIZE
     )
 
     payload = {
