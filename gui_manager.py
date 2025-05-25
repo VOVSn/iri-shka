@@ -1,17 +1,8 @@
 # gui_manager.py
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
+from datetime import datetime # Added for sorting calendar events
 
-# Assuming logger.py is in the project root, so direct import
-# If logger.py was in utils/, it would be from .logger import get_logger
-# For this refactoring, let's assume logger.py is in the project root.
-# If it's in utils/, you'd use `from .logger import get_logger` in `main.py`
-# and pass the logger instance or use `logging.getLogger()` here.
-# For simplicity, let's get the main app logger.
-# This will require main.py to initialize the logger first if this module is imported before logger setup.
-# A better pattern might be to pass a logger instance to GUIManager.
-# However, for now, let's use a direct getLogger approach.
-# This assumes `logger.py` has configured the "Iri-shka_App" logger.
 import logging
 logger = logging.getLogger("Iri-shka_App.GUIManager") # Child logger for this module
 
@@ -24,6 +15,8 @@ class GUIManager:
         # GUI Elements
         self.speak_button = None
         self.chat_history_display = None
+        self.todo_list_display = None
+        self.calendar_events_display = None
 
         # Component Status
         self.memory_status_frame = None
@@ -41,6 +34,7 @@ class GUIManager:
         self.gpu_mem_label = None
         self.gpu_util_label = None
 
+
         self._setup_styles()
         self._setup_widgets()
         self._configure_tags_for_chat_display()
@@ -50,75 +44,107 @@ class GUIManager:
     def _setup_styles(self):
         logger.debug("Setting up GUI styles.")
         style = ttk.Style()
+
+        available_themes = style.theme_names()
+        logger.debug(f"Available ttk themes: {available_themes}")
+        preferred_themes = ['clam', 'vista', 'alt', 'default', 'classic']
+        chosen_theme = None
+        for theme_name in preferred_themes:
+            if theme_name in available_themes:
+                try:
+                    style.theme_use(theme_name)
+                    logger.info(f"Using ttk theme: '{theme_name}'")
+                    chosen_theme = theme_name
+                    break
+                except tk.TclError as e:
+                    logger.warning(f"Could not use theme '{theme_name}': {e}")
+        if not chosen_theme:
+            logger.warning("Could not set a preferred ttk theme. Using system default.")
+
         style.configure("TButton", padding=6, font=('Helvetica', 12))
         style.configure("AppStatus.TLabel", padding=(6,3), font=('Helvetica', 10), anchor="w")
         style.configure("GPUStatus.TLabel", font=('Consolas', 9), padding=(3,3))
         style.configure("ComponentStatus.TLabel", font=('Consolas', 9, 'bold'), anchor="center")
 
+        try:
+            style.configure("TLabelFrame.Label", font=('Helvetica', 9, 'bold'))
+            logger.info("Applied bold font to all TLabelFrame.Label elements.")
+        except tk.TclError as e:
+            logger.warning(f"Could not configure default TLabelFrame.Label style: {e}. Labels may not be bold.")
+
+
     def _setup_widgets(self):
         logger.debug("Setting up GUI widgets.")
         self.app_window.title("Iri-shka: Voice AI Assistant")
-        self.app_window.geometry("650x720")
+        self.app_window.geometry("900x850")
 
         main_frame = ttk.Frame(self.app_window, padding="10")
         main_frame.pack(expand=True, fill=tk.BOTH)
 
-        self.chat_history_display = scrolledtext.ScrolledText(
-            main_frame, wrap=tk.WORD, height=20, state=tk.DISABLED, font=('Helvetica', 10)
-        )
-        self.chat_history_display.pack(pady=(0, 10), fill=tk.BOTH, expand=True)
-
+        # Combined Status Bar - Packed at the bottom of main_frame
         self.combined_status_bar_frame = ttk.Frame(main_frame, height=35, relief=tk.GROOVE, borderwidth=1)
         self.combined_status_bar_frame.pack(fill=tk.X, side=tk.BOTTOM, pady=(5, 0))
         self.combined_status_bar_frame.pack_propagate(False)
-
+        # ... (Populate combined_status_bar_frame as before) ...
         component_box_width = 100
         component_box_height = 30
-
         self.memory_status_frame = tk.Frame(self.combined_status_bar_frame, width=component_box_width, height=component_box_height, relief=tk.SUNKEN, borderwidth=1)
-        self.memory_status_frame.pack(side=tk.LEFT, padx=(2,2), pady=2, fill=tk.Y)
-        self.memory_status_frame.pack_propagate(False)
-        self.memory_status_text_label = ttk.Label(self.memory_status_frame, text="MEM: CHK", style="ComponentStatus.TLabel")
-        self.memory_status_text_label.pack(expand=True, fill=tk.BOTH)
-
+        self.memory_status_frame.pack(side=tk.LEFT, padx=(2,2), pady=2, fill=tk.Y); self.memory_status_frame.pack_propagate(False)
+        self.memory_status_text_label = ttk.Label(self.memory_status_frame, text="MEM: CHK", style="ComponentStatus.TLabel"); self.memory_status_text_label.pack(expand=True, fill=tk.BOTH)
         self.hearing_status_frame = tk.Frame(self.combined_status_bar_frame, width=component_box_width, height=component_box_height, relief=tk.SUNKEN, borderwidth=1)
-        self.hearing_status_frame.pack(side=tk.LEFT, padx=2, pady=2, fill=tk.Y)
-        self.hearing_status_frame.pack_propagate(False)
-        self.hearing_status_text_label = ttk.Label(self.hearing_status_frame, text="HEAR: CHK", style="ComponentStatus.TLabel")
-        self.hearing_status_text_label.pack(expand=True, fill=tk.BOTH)
-
+        self.hearing_status_frame.pack(side=tk.LEFT, padx=2, pady=2, fill=tk.Y); self.hearing_status_frame.pack_propagate(False)
+        self.hearing_status_text_label = ttk.Label(self.hearing_status_frame, text="HEAR: CHK", style="ComponentStatus.TLabel"); self.hearing_status_text_label.pack(expand=True, fill=tk.BOTH)
         self.voice_status_frame = tk.Frame(self.combined_status_bar_frame, width=component_box_width, height=component_box_height, relief=tk.SUNKEN, borderwidth=1)
-        self.voice_status_frame.pack(side=tk.LEFT, padx=2, pady=2, fill=tk.Y)
-        self.voice_status_frame.pack_propagate(False)
-        self.voice_status_text_label = ttk.Label(self.voice_status_frame, text="VOICE: CHK", style="ComponentStatus.TLabel")
-        self.voice_status_text_label.pack(expand=True, fill=tk.BOTH)
-
+        self.voice_status_frame.pack(side=tk.LEFT, padx=2, pady=2, fill=tk.Y); self.voice_status_frame.pack_propagate(False)
+        self.voice_status_text_label = ttk.Label(self.voice_status_frame, text="VOICE: CHK", style="ComponentStatus.TLabel"); self.voice_status_text_label.pack(expand=True, fill=tk.BOTH)
         self.mind_status_frame = tk.Frame(self.combined_status_bar_frame, width=component_box_width, height=component_box_height, relief=tk.SUNKEN, borderwidth=1)
-        self.mind_status_frame.pack(side=tk.LEFT, padx=(2,5), pady=2, fill=tk.Y)
-        self.mind_status_frame.pack_propagate(False)
-        self.mind_status_text_label = ttk.Label(self.mind_status_frame, text="MIND: CHK", style="ComponentStatus.TLabel")
-        self.mind_status_text_label.pack(expand=True, fill=tk.BOTH)
+        self.mind_status_frame.pack(side=tk.LEFT, padx=(2,5), pady=2, fill=tk.Y); self.mind_status_frame.pack_propagate(False)
+        self.mind_status_text_label = ttk.Label(self.mind_status_frame, text="MIND: CHK", style="ComponentStatus.TLabel"); self.mind_status_text_label.pack(expand=True, fill=tk.BOTH)
+        self.gpu_util_label = ttk.Label(self.combined_status_bar_frame, text="GPU Util: N/A", style="GPUStatus.TLabel"); self.gpu_util_label.pack(side=tk.RIGHT, padx=(2,5), pady=2, fill=tk.Y)
+        self.gpu_mem_label = ttk.Label(self.combined_status_bar_frame, text="GPU Mem: N/A", style="GPUStatus.TLabel"); self.gpu_mem_label.pack(side=tk.RIGHT, padx=2, pady=2, fill=tk.Y)
+        self.app_status_label = ttk.Label(self.combined_status_bar_frame, text="Initializing...", style="AppStatus.TLabel", relief=tk.FLAT); self.app_status_label.pack(side=tk.LEFT, padx=5, pady=2, fill=tk.BOTH, expand=True)
 
-        self.gpu_util_label = ttk.Label(self.combined_status_bar_frame, text="GPU Util: N/A", style="GPUStatus.TLabel")
-        self.gpu_util_label.pack(side=tk.RIGHT, padx=(2,5), pady=2, fill=tk.Y)
-
-        self.gpu_mem_label = ttk.Label(self.combined_status_bar_frame, text="GPU Mem: N/A", style="GPUStatus.TLabel")
-        self.gpu_mem_label.pack(side=tk.RIGHT, padx=2, pady=2, fill=tk.Y)
-
-        self.app_status_label = ttk.Label(self.combined_status_bar_frame, text="Initializing...", style="AppStatus.TLabel", relief=tk.FLAT)
-        self.app_status_label.pack(side=tk.LEFT, padx=5, pady=2, fill=tk.BOTH, expand=True)
-
+        # Speak Button Frame - Packed above status bar
         speak_button_frame = ttk.Frame(main_frame)
-        speak_button_frame.pack(pady=(10, 5), fill=tk.X, side=tk.BOTTOM)
-        self.speak_button = ttk.Button(
-            speak_button_frame, text="Loading...",
-            command=self.action_callbacks['toggle_speaking_recording'],
-            state=tk.DISABLED
-        )
+        speak_button_frame.pack(fill=tk.X, side=tk.BOTTOM, pady=(5, 5))
+        self.speak_button = ttk.Button(speak_button_frame, text="Loading...", command=self.action_callbacks['toggle_speaking_recording'], state=tk.DISABLED)
         self.speak_button.pack(ipady=10, ipadx=20)
+
+        # User Info Frame - Packed above speak button, uses GRID internally
+        user_info_frame_height = 350 
+        user_info_frame = ttk.Frame(main_frame, height=user_info_frame_height)
+        user_info_frame.pack(fill=tk.X, side=tk.BOTTOM, pady=(5, 5))
+        user_info_frame.pack_propagate(False) 
+
+        user_info_frame.columnconfigure(0, weight=3) 
+        user_info_frame.columnconfigure(1, weight=2) 
+        user_info_frame.rowconfigure(0, weight=1)    
+
+        # Calendar Events List (Left side, wider)
+        calendar_labelframe = ttk.LabelFrame(user_info_frame, text="Calendar Events")
+        calendar_labelframe.grid(row=0, column=0, sticky="nsew", padx=(0, 5), pady=2)
+        self.calendar_events_display = scrolledtext.ScrolledText(
+            calendar_labelframe, wrap=tk.WORD, height=9, # Increased height to 9 lines
+            state=tk.DISABLED, font=('Helvetica', 9)
+        )
+        self.calendar_events_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=(0,5))
+
+        # Todos List (Right side, narrower)
+        todos_labelframe = ttk.LabelFrame(user_info_frame, text="Pending Todos")
+        todos_labelframe.grid(row=0, column=1, sticky="nsew", padx=(5, 0), pady=2)
+        self.todo_list_display = scrolledtext.ScrolledText(
+            todos_labelframe, wrap=tk.WORD, height=9, # Increased height to 9 lines
+            state=tk.DISABLED, font=('Helvetica', 9)
+        )
+        self.todo_list_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=(0,5))
+
+        # Chat History - Packed at the top of main_frame, expands
+        self.chat_history_display = scrolledtext.ScrolledText(main_frame, wrap=tk.WORD, state=tk.DISABLED, font=('Helvetica', 10))
+        self.chat_history_display.pack(pady=(0, 10), fill=tk.BOTH, expand=True)
+
         logger.debug("GUI widgets setup finished.")
 
-
+    # ... (rest of the GUIManager class remains the same) ...
     def _configure_tags_for_chat_display(self):
         if not self.chat_history_display:
             logger.warning("Chat history display not available for tag configuration.")
@@ -137,7 +163,6 @@ class GUIManager:
 
     def _safe_ui_update(self, update_lambda):
         if self.app_window and self.app_window.winfo_exists():
-            # logger.debug(f"Scheduling safe UI update: {update_lambda}") # Can be too verbose
             self.app_window.after(0, update_lambda)
         else:
             logger.warning("Attempted safe UI update, but app window no longer exists.")
@@ -165,16 +190,12 @@ class GUIManager:
             logger.warning(f"Attempted to update component status, but frame or label is None. Text: '{text_to_display}', Category: '{status_category}'")
             return
 
-        # logger.debug(f"Updating component status: Text='{text_to_display}', Category='{status_category}' for label {widget_label.winfo_name()}")
         widget_label.config(text=text_to_display)
         bg_color = "light grey"; text_color = "black"
-
         if status_category == "ready": bg_color = "#90EE90"; text_color = "dark green"
         elif status_category in ["loaded", "saved", "fresh"]: bg_color = "#ADD8E6"; text_color = "navy"
         elif status_category in ["loading", "checking", "pinging", "thinking"]: bg_color = "#FFFFE0"; text_color = "darkgoldenrod"
         elif status_category in ["error", "na", "timeout", "conn_error", "http_502", "http_other", "InitFail"]: bg_color = "#FFA07A"; text_color = "darkred"
-        # elif status_category == "fresh": bg_color = "#D3D3D3"; text_color = "dimgray" # Merged with loaded/saved for simplicity
-
         widget_frame.config(background=bg_color)
         widget_label.config(background=bg_color, foreground=text_color)
 
@@ -208,18 +229,13 @@ class GUIManager:
             if not self.gpu_mem_label or not self.gpu_util_label:
                 logger.warning(f"Attempted to update GPU status display, but labels are None. Mem='{mem_text}', Util='{util_text}'")
                 return
-
-            logger.debug(f"Updating GPU status display: Mem='{mem_text}', Util='{util_text}', Category='{status_category}'")
             self.gpu_mem_label.config(text=f"GPU Mem: {mem_text}")
             self.gpu_util_label.config(text=f"GPU Util: {util_text}")
-
             fg_color = "dimgray"
             if status_category == "ok_gpu": fg_color = "darkslategrey"
-            elif status_category == "na_nvml": fg_color = "silver" # Using silver for better visibility on potential dark themes
+            elif status_category == "na_nvml": fg_color = "silver"
             elif status_category in ["error", "error_nvml_loop", "InitFail", "checking"]: fg_color = "red"
             if status_category == "checking": fg_color = "orange"
-
-
             self.gpu_mem_label.config(foreground=fg_color)
             self.gpu_util_label.config(foreground=fg_color)
         self._safe_ui_update(_update)
@@ -229,11 +245,8 @@ class GUIManager:
         if not self.chat_history_display:
             logger.warning(f"Attempted to add message to display, but chat_history_display is None. Message: '{message_with_prefix[:50]}...'")
             return
-
         actual_tag = tag
         if is_error and tag == "assistant_tag": actual_tag = "assistant_tag_error"
-
-        # logger.debug(f"Adding message to chat display: Tag='{actual_tag}', Message='{message_with_prefix[:50]}...'")
         self.chat_history_display.config(state=tk.NORMAL)
         self.chat_history_display.insert(tk.END, message_with_prefix, actual_tag)
         self.chat_history_display.see(tk.END)
@@ -257,23 +270,92 @@ class GUIManager:
         def _update():
             self.chat_history_display.config(state=tk.NORMAL)
             self.chat_history_display.delete(1.0, tk.END)
-            for turn_num, turn in enumerate(chat_history_list):
+            for turn in chat_history_list:
                 user_message = turn.get('user', '')
                 assistant_message = turn.get('assistant', '')
                 if user_message:
-                    # logger.debug(f"ChatReplay Turn {turn_num+1} User: {user_message[:50]}...")
                     self._add_message_to_display_internal(f"You: {user_message}\n", "user_tag")
                 if assistant_message:
                     is_error = assistant_message.startswith(("[Ollama Error:", "[LLM Error:", "[LLM Unreachable:")) or \
                                assistant_message == "I didn't catch that, could you please repeat?" or \
                                assistant_message == "Я не расслышала, не могли бы вы повторить?"
-                    # logger.debug(f"ChatReplay Turn {turn_num+1} Assistant (Error={is_error}): {assistant_message[:50]}...")
                     formatted_assistant_msg = assistant_message
                     if not formatted_assistant_msg.endswith("\n\n"):
                         formatted_assistant_msg = formatted_assistant_msg + "\n" if formatted_assistant_msg.endswith("\n") else formatted_assistant_msg + "\n\n"
                     self._add_message_to_display_internal(f"Iri-shka: {formatted_assistant_msg}", "assistant_tag", is_error=is_error)
             self.chat_history_display.see(tk.END)
             self.chat_history_display.config(state=tk.DISABLED)
+        self._safe_ui_update(_update)
+
+    def update_todo_list(self, todos):
+        if not self.todo_list_display:
+            logger.warning("Todo list display not available for update.")
+            return
+        logger.info(f"Updating todo list display with {len(todos) if isinstance(todos, list) else 0} items.")
+        def _update():
+            self.todo_list_display.config(state=tk.NORMAL)
+            self.todo_list_display.delete(1.0, tk.END)
+            if not todos or not isinstance(todos, list):
+                self.todo_list_display.insert(tk.END, "No todos." if not todos else "Invalid todo data.")
+            else:
+                for todo_item in todos:
+                    self.todo_list_display.insert(tk.END, f"- {str(todo_item)}\n")
+            self.todo_list_display.config(state=tk.DISABLED)
+            self.todo_list_display.see(tk.END)
+        self._safe_ui_update(_update)
+
+    def update_calendar_events_list(self, events):
+        if not self.calendar_events_display:
+            logger.warning("Calendar events display not available for update.")
+            return
+        logger.info(f"Updating calendar events display with {len(events) if isinstance(events, list) else 0} items.")
+
+        def _sort_key_calendar_event(event):
+            if not isinstance(event, dict):
+                logger.warning(f"Calendar event item is not a dictionary: {event}. Placing last in sort.")
+                return datetime.max
+            date_str = event.get("date", "1900-01-01")
+            time_str = event.get("time", "00:00")
+            try:
+                return datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
+            except ValueError:
+                logger.debug(f"Malformed date/time '{date_str} {time_str}' for {event}. Trying date only.")
+                try: return datetime.strptime(date_str, "%Y-%m-%d")
+                except ValueError:
+                    logger.warning(f"Unparseable date '{date_str}' for {event}. Placing last.")
+                    return datetime.max
+
+        sorted_events = []
+        if isinstance(events, list):
+            try:
+                valid_events = [e for e in events if isinstance(e, dict)]
+                if len(valid_events) != len(events): logger.warning("Non-dict items in calendar_events.")
+                sorted_events = sorted(valid_events, key=_sort_key_calendar_event)
+            except Exception as e_sort:
+                logger.error(f"Error sorting calendar events: {e_sort}. Displaying as received.", exc_info=True)
+                sorted_events = [e for e in events if isinstance(e, dict)] if isinstance(events, list) else []
+        else:
+            logger.warning(f"Calendar events data is not a list: {type(events)}.")
+
+        def _update():
+            self.calendar_events_display.config(state=tk.NORMAL)
+            self.calendar_events_display.delete(1.0, tk.END)
+            if not sorted_events:
+                self.calendar_events_display.insert(tk.END, "No calendar events.")
+            else:
+                for event in sorted_events:
+                    if not isinstance(event, dict):
+                        self.calendar_events_display.insert(tk.END, f"- Invalid: {str(event)[:50]}...\n")
+                        continue
+                    date_str = event.get("date", "N/A")
+                    time_str = event.get("time")
+                    desc = event.get("description", event.get("name", "Unnamed Event"))
+                    display_text = f"{date_str}"
+                    if time_str: display_text += f" {time_str}"
+                    display_text += f": {desc}\n"
+                    self.calendar_events_display.insert(tk.END, display_text)
+            self.calendar_events_display.config(state=tk.DISABLED)
+            self.calendar_events_display.see(tk.END)
         self._safe_ui_update(_update)
 
     def show_error_messagebox(self, title, msg):
@@ -295,7 +377,6 @@ class GUIManager:
                 self.app_window.destroy()
                 logger.info("Tkinter window destroyed successfully.")
             except tk.TclError as e:
-                # This error often happens if the window is already gone, which is fine during shutdown.
                 logger.warning(f"Tkinter error during destroy (often ignorable if already destroyed): {e}", exc_info=False)
             self.app_window = None
         else:

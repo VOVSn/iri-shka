@@ -7,23 +7,8 @@ import os
 import re
 import logging # Import logging for initial setup
 
-# Attempt to import logger.py.
-# This assumes logger.py is in the project root or utils/.
-# If logger.py is in utils, the import in other utils modules will be .logger
-# Here, we might need to adjust sys.path if logger.py is in utils and main.py is in root.
-# For this example, let's assume logger.py is at the root (python_tts_test/logger.py)
-# or that python_tts_test/utils/ is in PYTHONPATH for `from .logger import get_logger` in utils modules.
 
-# --- Centralized Logger Setup ---
-# This should be one of THE VERY FIRST things your application does.
 try:
-    # Assuming logger.py is in the root of python_tts_test
-    # If logger.py is in utils/, this import needs to change,
-    # or utils must be a package and logger.py correctly imported by other utils.
-    # For now, let's assume logger.py is structured to be found directly.
-    # If you placed logger.py in the `utils` folder, and `utils` has `__init__.py`,
-    # you might do: `from utils.logger import get_logger as get_app_logger`
-    # For simplicity, if logger.py is at root:
     import logger as app_logger_module # This will execute logger.py
     logger = app_logger_module.get_logger("Iri-shka_App.Main") # Get a child logger for main.py
 except ImportError as e:
@@ -209,9 +194,16 @@ def process_recorded_audio_and_interact(recorded_sample_rate):
             user_state = ollama_data["updated_user_state"]
             assistant_state = ollama_data["updated_assistant_state"]
             assistant_state["last_used_language"] = current_lang_code_for_state # Ensure this is updated
-            logger.debug(f"User state updated: {str(user_state)[:200]}...") # Log snippets
-            logger.debug(f"Assistant state updated: {str(assistant_state)[:200]}...")
+            
+            logger.debug(f"User state updated from LLM: {str(user_state)[:200]}...") 
+            logger.debug(f"Assistant state updated from LLM: {str(assistant_state)[:200]}...")
             logger.info(f"LLM Response: '{assistant_response_text[:70]}...'")
+
+            # Update new GUI elements for Todos and Calendar
+            if 'update_todo_list' in gui_callbacks:
+                gui_callbacks['update_todo_list'](user_state.get("todos", []))
+            if 'update_calendar_events_list' in gui_callbacks:
+                gui_callbacks['update_calendar_events_list'](user_state.get("calendar_events", []))
 
             current_turn_for_history["assistant"] = assistant_response_text
 
@@ -460,6 +452,8 @@ if __name__ == "__main__":
     gui_callbacks['add_assistant_message_to_display'] = gui.add_assistant_message_to_display
     gui_callbacks['on_recording_finished'] = process_recorded_audio_and_interact # Critical callback
     gui_callbacks['gpu_status_update_display'] = gui.update_gpu_status_display
+    gui_callbacks['update_todo_list'] = gui.update_todo_list  # New callback
+    gui_callbacks['update_calendar_events_list'] = gui.update_calendar_events_list  # New callback
     logger.info("GUI callbacks dictionary populated.")
 
     # Ensure last_used_language is present from default if new state files created
@@ -472,6 +466,14 @@ if __name__ == "__main__":
 
     gui.update_chat_display_from_list(chat_history) # GUIManager logs this
     logger.info("Initial chat history displayed on GUI.")
+
+    # Populate initial Todos and Calendar events on GUI
+    logger.info("Populating initial Todos and Calendar events on GUI.")
+    if 'update_todo_list' in gui_callbacks:
+        gui_callbacks['update_todo_list'](user_state.get("todos", []))
+    if 'update_calendar_events_list' in gui_callbacks:
+        gui_callbacks['update_calendar_events_list'](user_state.get("calendar_events", []))
+
 
     # Initialize and start GPU Monitor
     logger.info("Initializing GPU Monitor...")

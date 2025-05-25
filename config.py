@@ -47,8 +47,8 @@ DEFAULT_USER_STATE = {
     "topics_discussed": [],
     "user_sentiment_summary": "positive",
     "preferences": {},
-    "todos": [],
-    "calendar_events": [],
+    "todos": [], # List of strings, e.g., ["Buy milk", "Call John"]
+    "calendar_events": [], # List of dicts, e.g., [{"description": "Meeting with Team", "date": "YYYY-MM-DD", "time": "HH:MM" (optional)}]
     "birthdays": [] # [{"name": "John Doe", "date": "YYYY-MM-DD"}]
 }
 
@@ -102,7 +102,9 @@ Instructions for updating state:
 - Respond in the language indicated by the language instruction (English or Russian).
 - Consider the user's language, the context of the conversation, and their state.
 - Update both user_state and your_state thoughtfully.
-- If the user asks to remember something (like a birthday: name and date), update the "birthdays" list in user_state.
+- If the user asks to remember something (like a birthday: name and date), update the "birthdays" list in user_state (e.g., {{"name": "Jane", "date": "YYYY-MM-DD"}}).
+- If the user mentions a task or something to do, update the "todos" list in user_state with strings (e.g., ["Buy groceries", "Finish report"]).
+- If the user mentions an event with a date (and optional time), update the "calendar_events" list in user_state with dictionaries (e.g., [{{"description": "Team Meeting", "date": "YYYY-MM-DD", "time": "HH:MM"}}]).
 - If the user asks a question, provide a concise and helpful answer in "answer_to_user".
 - If you identify a new topic, update "current_topic" in user_state.
 - Maintain your persona as Iri-shka.
