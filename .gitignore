@@ -1,0 +1,6 @@
+venv
+output_recordings/
+codebase
+*.json
+__pycache__
+data
