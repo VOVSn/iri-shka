@@ -4,3 +4,4 @@ codebase
 *.json
 __pycache__
 data
+logs
