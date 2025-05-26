@@ -331,10 +331,7 @@ class GUIManager:
         self.kanban_pending_display = scrolledtext.ScrolledText(kanban_pending_labelframe, **kanban_scrolled_text_options)
         self.kanban_pending_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         self.scrolled_text_widgets.append(self.kanban_pending_display)
-        # Placeholder content
-        self.kanban_pending_display.config(state=tk.NORMAL)
-        self.kanban_pending_display.insert(tk.END, "Task A\nTask B")
-        self.kanban_pending_display.config(state=tk.DISABLED)
+        # Placeholder content REMOVED
 
 
         kanban_in_process_labelframe = ttk.LabelFrame(user_info_frame, text="In Process")
@@ -342,18 +339,14 @@ class GUIManager:
         self.kanban_in_process_display = scrolledtext.ScrolledText(kanban_in_process_labelframe, **kanban_scrolled_text_options)
         self.kanban_in_process_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         self.scrolled_text_widgets.append(self.kanban_in_process_display)
-        self.kanban_in_process_display.config(state=tk.NORMAL)
-        self.kanban_in_process_display.insert(tk.END, "Task C")
-        self.kanban_in_process_display.config(state=tk.DISABLED)
+        # Placeholder content REMOVED
 
         kanban_finished_labelframe = ttk.LabelFrame(user_info_frame, text="Finished")
         kanban_finished_labelframe.grid(row=0, column=2, sticky="nsew", padx=(2,0), pady=(0,5))
         self.kanban_finished_display = scrolledtext.ScrolledText(kanban_finished_labelframe, **kanban_scrolled_text_options)
         self.kanban_finished_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         self.scrolled_text_widgets.append(self.kanban_finished_display)
-        self.kanban_finished_display.config(state=tk.NORMAL)
-        self.kanban_finished_display.insert(tk.END, "Task D (Done)")
-        self.kanban_finished_display.config(state=tk.DISABLED)
+        # Placeholder content REMOVED
 
 
         # --- User Info Row (Row 1 - Calendar, Events, Todos) ---
@@ -430,16 +423,6 @@ class GUIManager:
         logger.debug("GUI widgets setup finished.")
         if TKCALENDAR_AVAILABLE:
             self._on_date_selected()
-
-    # ... (rest of the methods remain the same as in the previous correct response) ...
-    # _on_date_selected, _mark_dates_with_events_on_calendar, _update_filtered_event_display
-    # _configure_tags_for_chat_display, _handle_space_key_press, _setup_protocol_handlers
-    # _safe_ui_update, update_status_label, update_speak_button
-    # _update_component_status_widget_internal, and all update_XYZ_status methods
-    # update_gpu_status_display, _add_message_to_display_internal, add_user_message_to_display
-    # add_assistant_message_to_display, update_chat_display_from_list
-    # update_todo_list, update_calendar_events_list (this one calls the internal filtering/marking)
-    # show_error_messagebox, show_info_messagebox, show_warning_messagebox, destroy_window
     
     def _on_date_selected(self, event=None):
         if not TKCALENDAR_AVAILABLE or not self.calendar_widget:
@@ -567,10 +550,10 @@ class GUIManager:
         label_bg = colors.get("component_status_label_default_bg", colors["frame_bg"])
         label_fg = colors.get("component_status_label_default_fg", colors["fg"])
         
-        if status_category == "ready": label_bg = "#90EE90"; label_fg = "dark green"
-        elif status_category in ["loaded", "saved", "fresh", "idle", "off"]: label_bg = "#ADD8E6"; label_fg = "navy"
-        elif status_category in ["loading", "checking", "pinging", "thinking"]: label_bg = "#FFFFE0"; label_fg = "darkgoldenrod"
-        elif status_category in ["error", "na", "timeout", "conn_error", "http_502", "http_other", "InitFail", "unreachable"]: label_bg = "#FFA07A"; label_fg = "darkred"
+        if status_category == "ready": label_bg = "#90EE90"; label_fg = "dark green" # Green
+        elif status_category in ["loaded", "saved", "fresh", "idle", "off"]: label_bg = "#ADD8E6"; label_fg = "navy" # Blue
+        elif status_category in ["loading", "checking", "pinging", "thinking"]: label_bg = "#FFFFE0"; label_fg = "darkgoldenrod" # Yellow
+        elif status_category in ["error", "na", "timeout", "conn_error", "http_502", "http_other", "InitFail", "unreachable"]: label_bg = "#FFA07A"; label_fg = "darkred" # Red/Orange
         
         widget_label.config(text=text_to_display, background=label_bg, foreground=label_fg)
 
@@ -705,6 +688,33 @@ class GUIManager:
         if TKCALENDAR_AVAILABLE and self.calendar_widget:
             self._mark_dates_with_events_on_calendar(self.all_calendar_events_data)
         self._update_filtered_event_display()
+
+    def _update_kanban_column(self, display_widget, tasks_list, column_name_for_log):
+        if not display_widget:
+            logger.warning(f"Kanban display widget for '{column_name_for_log}' not available.")
+            return
+        
+        logger.info(f"Updating Kanban '{column_name_for_log}' display with {len(tasks_list) if isinstance(tasks_list, list) else 0} items.")
+        def _update():
+            display_widget.config(state=tk.NORMAL)
+            display_widget.delete(1.0, tk.END)
+            if not tasks_list or not isinstance(tasks_list, list):
+                display_widget.insert(tk.END, f"No {column_name_for_log.lower()} tasks." if not tasks_list else f"Invalid data for {column_name_for_log.lower()} tasks.")
+            else:
+                for task_item in tasks_list:
+                    display_widget.insert(tk.END, f"- {str(task_item)}\n")
+            display_widget.config(state=tk.DISABLED)
+            display_widget.see(tk.END) # Scroll to the end
+        self._safe_ui_update(_update)
+
+    def update_kanban_pending(self, tasks_list):
+        self._update_kanban_column(self.kanban_pending_display, tasks_list, "Pending")
+
+    def update_kanban_in_process(self, tasks_list):
+        self._update_kanban_column(self.kanban_in_process_display, tasks_list, "In Process")
+
+    def update_kanban_completed(self, tasks_list):
+        self._update_kanban_column(self.kanban_finished_display, tasks_list, "Completed")
 
     def show_error_messagebox(self, title, msg):
         logger.error(f"Displaying error messagebox: Title='{title}', Message='{msg}'")
