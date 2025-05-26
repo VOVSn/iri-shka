@@ -10,7 +10,7 @@ ASSISTANT_STATE_FILE = f"{DATA_FOLDER}/assistant_state.json"
 
 # --- Ollama ---
 OLLAMA_API_URL = "http://localhost:11434/api/generate"
-OLLAMA_MODEL_NAME = "phi4" # Or "phi3" or your chosen model
+OLLAMA_MODEL_NAME = "qwen2.5vl:7b" # Or "phi3" or your chosen model
 OLLAMA_REQUEST_TIMEOUT = 180
 OLLAMA_PING_TIMEOUT = 15 # Shorter timeout for the initial health check
 OLLAMA_PING_PROMPT = "You are an AI assistant. Respond with a single word: 'ready'." # Simple prompt for health check

@@ -23,7 +23,7 @@ ERROR_LOG_FILE_PATH = os.path.join(LOGS_DIR_NAME, ERROR_LOG_FILENAME)
 # We will configure a single logger and add multiple handlers to it.
 # Modules will get this logger instance.
 _app_logger_instance = logging.getLogger("Iri-shka_App")
-_app_logger_instance.setLevel(logging.DEBUG)  # Set to lowest level, handlers will filter
+_app_logger_instance.setLevel(logging.INFO)  # Set to lowest level, handlers will filter
 _app_logger_instance.propagate = False # Prevent log duplication if root logger is configured elsewhere
 
 # --- Formatter ---

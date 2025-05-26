@@ -19,26 +19,9 @@ torch_module = None
 AutoProcessor_class = None
 BarkModel_class = None
 
-# --- Define the path to your local Bark models within the project ---
-# Assuming your project structure is something like:
-# project_root/
-# |-- utils/
-# |   |-- tts_manager.py
-# |   |-- speak_bark.py
-# |   |-- logger.py
-# |   |-- config.py (potentially)
-# |-- bark/  <-- YOUR BARK MODEL SNAPSHOT FILES ARE HERE
-# |   |-- config.json
-# |   |-- pytorch_model.bin
-# |   |-- ... other model files ...
-# |-- main_app.py
-
-# Calculate the path relative to this file (tts_manager.py)
-# This file is in utils/, so ../ goes to project_root/
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 EXPLICIT_BARK_LOCAL_PATH = os.path.join(PROJECT_ROOT, "bark")
 logger.info(f"Calculated explicit local Bark model path: {EXPLICIT_BARK_LOCAL_PATH}")
-# --- End Local Model Path Definition ---
 
 
 try:
@@ -73,7 +56,7 @@ except Exception as e:
     _bark_imports_ok = False
 
 
-TTS_AVAILABLE = _bark_imports_ok
+TTS_CAPABLE = _bark_imports_ok # Renamed to reflect capability vs current readiness
 
 _bark_processor = None
 _bark_model = None
@@ -87,20 +70,19 @@ tts_stop_event = None
 
 
 def is_tts_ready():
-    return TTS_AVAILABLE and _bark_resources_ready and not _bark_loading_in_progress
+    return TTS_CAPABLE and _bark_resources_ready and not _bark_loading_in_progress
 
 def is_tts_loading():
-    return TTS_AVAILABLE and _bark_loading_in_progress
+    return TTS_CAPABLE and _bark_loading_in_progress
 
 def load_bark_resources(gui_callbacks=None):
     global _bark_processor, _bark_model, _bark_device, _bark_resources_ready
-    global _bark_loading_in_progress, _bark_load_error_msg, TTS_AVAILABLE
+    global _bark_loading_in_progress, _bark_load_error_msg
 
-    # --- Key Offline Settings ---
     os.environ["HF_HUB_OFFLINE"] = "1"
-    logger.info(f"Ensured HF_HUB_OFFLINE is set to '1'.")
+    logger.debug(f"Ensured HF_HUB_OFFLINE is set to '1'.")
 
-    model_load_path = config.BARK_MODEL_NAME # Fallback, e.g., "suno/bark-small"
+    model_load_path = config.BARK_MODEL_NAME 
 
     if os.path.isdir(EXPLICIT_BARK_LOCAL_PATH):
         logger.info(f"Using explicit local path for Bark model: {EXPLICIT_BARK_LOCAL_PATH}")
@@ -108,35 +90,37 @@ def load_bark_resources(gui_callbacks=None):
     else:
         logger.warning(f"Explicit local path '{EXPLICIT_BARK_LOCAL_PATH}' for Bark model NOT FOUND or is not a directory.")
         logger.warning(f"Will attempt to load '{config.BARK_MODEL_NAME}' from Hugging Face cache (if available offline).")
-        # If EXPLICIT_BARK_LOCAL_PATH was critical, you might want to set TTS_AVAILABLE = False here
-        # and return, or raise an error. For now, it will try the HF cache path.
-    # --- End Key Offline Settings ---
 
 
-    if not TTS_AVAILABLE: # Check if imports themselves failed
+    if not TTS_CAPABLE: 
         final_import_err_msg = _bark_import_error_message or "speak_bark.py or its dependencies not correctly imported."
         logger.error(f"Cannot load Bark resources. Import failure: {final_import_err_msg}")
         _bark_load_error_msg = final_import_err_msg
         if gui_callbacks and 'status_update' in gui_callbacks:
             gui_callbacks['status_update'](f"Bark TTS unavailable: {final_import_err_msg[:60]}...")
-        # No messagebox here as it's an import issue, not a load attempt failure.
         return
 
     if _bark_resources_ready:
         logger.info("Bark resources already loaded.")
+        if gui_callbacks and 'voice_status_update' in gui_callbacks:
+             gui_callbacks['voice_status_update']("VOICE: RDY", "ready") # Ensure status is updated if called again
         return
     if _bark_loading_in_progress:
         logger.info("Bark resource loading already in progress. Ignoring new request.")
         return
 
     _bark_loading_in_progress = True
-    _bark_resources_ready = False
+    _bark_resources_ready = False # Explicitly set before attempting load
     _bark_load_error_msg = None
 
     status_msg_gui = f"Initializing Bark TTS ({os.path.basename(str(model_load_path))})..."
     logger.info(f"Loading Bark resources from: '{model_load_path}'.")
-    if gui_callbacks and 'status_update' in gui_callbacks:
-        gui_callbacks['status_update'](status_msg_gui)
+    if gui_callbacks:
+        if 'status_update' in gui_callbacks:
+            gui_callbacks['status_update'](status_msg_gui)
+        if 'voice_status_update' in gui_callbacks: # Update component status
+            gui_callbacks['voice_status_update']("VOICE: CHK", "loading")
+
 
     try:
         if not torch_module or not AutoProcessor_class or not BarkModel_class:
@@ -146,33 +130,32 @@ def load_bark_resources(gui_callbacks=None):
         logger.info(f"Target device for Bark model: {_bark_device}")
 
         logger.info(f"Loading Bark processor from '{model_load_path}'...")
-        _bark_processor = AutoProcessor_class.from_pretrained(
-            model_load_path,
-            # local_files_only=True # Could also be used if HF_HUB_OFFLINE wasn't enough, but HF_HUB_OFFLINE should suffice.
-        )
+        _bark_processor = AutoProcessor_class.from_pretrained(model_load_path)
 
         logger.info(f"Loading Bark model from '{model_load_path}' to {_bark_device}...")
-        _bark_model = BarkModel_class.from_pretrained(
-            model_load_path,
-            # local_files_only=True
-        )
+        _bark_model = BarkModel_class.from_pretrained(model_load_path)
         _bark_model.to(_bark_device)
 
         _bark_resources_ready = True
         success_msg = f"Bark TTS ready (Model: {os.path.basename(str(model_load_path))} on {_bark_device})."
         logger.info(success_msg)
-        if gui_callbacks and 'status_update' in gui_callbacks:
-            gui_callbacks['status_update'](success_msg)
+        if gui_callbacks:
+            if 'status_update' in gui_callbacks:
+                gui_callbacks['status_update'](success_msg)
+            if 'voice_status_update' in gui_callbacks:
+                 gui_callbacks['voice_status_update']("VOICE: RDY", "ready")
+
 
     except Exception as e:
         _bark_load_error_msg = f"Failed to load Bark resources from '{model_load_path}': {e}"
         logger.critical(_bark_load_error_msg, exc_info=True)
-        TTS_AVAILABLE = False # Critical failure, TTS is not usable
-        _bark_resources_ready = False # Ensure this is false
+        _bark_resources_ready = False 
         if gui_callbacks:
             if 'status_update' in gui_callbacks:
                 gui_callbacks['status_update'](f"Bark TTS Error: {_bark_load_error_msg[:60]}...")
-            if 'messagebox_error' in gui_callbacks:
+            if 'voice_status_update' in gui_callbacks:
+                 gui_callbacks['voice_status_update']("VOICE: NRDY", "error")
+            if 'messagebox_error' in gui_callbacks: # Keep for critical load failures
                 gui_callbacks['messagebox_error']("Bark TTS Load Error", _bark_load_error_msg)
     finally:
         _bark_loading_in_progress = False
@@ -186,7 +169,7 @@ def start_speaking_response(text_to_speak, persona_name_llm, target_voice_preset
         errmsg = "TTS not ready."
         if _bark_loading_in_progress: errmsg = "TTS resources still loading."
         elif _bark_load_error_msg: errmsg = f"TTS load failed: {_bark_load_error_msg[:50]}..."
-        elif not TTS_AVAILABLE: # This means either import or load failed critically
+        elif not TTS_CAPABLE: 
             errmsg = _bark_import_error_message or _bark_load_error_msg or "TTS module unavailable or failed to load."
             errmsg = f"TTS unavailable: {errmsg[:50]}..."
 
@@ -229,22 +212,14 @@ def start_speaking_response(text_to_speak, persona_name_llm, target_voice_preset
             device=_bark_device,
             voice_preset=target_voice_preset
         )
-        streamer = StreamingBarkTTS_class(
-            bark_tts_instance=bark_tts_instance,
-            # max_sentences_per_chunk and silence_duration_ms will be taken from speak_bark.py defaults or config
-        )
-
-        generation_params = {
-            # These will be taken from config inside speak_bark.py's BarkTTS.synthesize_speech_to_array
-            # "do_sample": config.BARK_DO_SAMPLE,
-            # "fine_temperature": config.BARK_FINE_TEMPERATURE,
-            # "coarse_temperature": config.BARK_COARSE_TEMPERATURE
-        }
+        streamer = StreamingBarkTTS_class(bark_tts_instance=bark_tts_instance)
+        
+        generation_params = {} # Empty, speak_bark uses config defaults
 
         thread_name = f"BarkTTSStream-{time.strftime('%H%M%S')}"
         current_tts_thread = threading.Thread(
             target=streamer.synthesize_and_play_stream,
-            args=(text_to_speak, tts_stop_event, generation_params), # Pass empty dict if no specific overrides
+            args=(text_to_speak, tts_stop_event, generation_params), 
             kwargs={"on_playback_start_callback": on_actual_playback_start_gui_callback},
             name=thread_name,
             daemon=True
@@ -258,20 +233,20 @@ def start_speaking_response(text_to_speak, persona_name_llm, target_voice_preset
         errmsg = f"Error starting Bark speech: {e}"
         logger.error(errmsg, exc_info=True)
         if gui_callbacks:
-            if 'messagebox_error' in gui_callbacks:
+            if 'messagebox_error' in gui_callbacks: # Keep for actual errors during speech attempt
                 gui_callbacks['messagebox_error']("Bark TTS Error", errmsg)
             if 'status_update' in gui_callbacks:
                 gui_callbacks['status_update'](f"Bark speech error: {str(e)[:50]}...")
         if on_actual_playback_start_gui_callback:
             logger.debug(f"TTS error during start, invoking on_actual_playback_start_gui_callback as fallback.")
             try: on_actual_playback_start_gui_callback()
-            except Exception as cb_exc: logger.error(f"Error in fallback on_playback_start_gui_callback: {cb_exc}", exc_info=True)
+            except Exception as cb_exc: logger.error(f"Error in fallback on_actual_playback_start_gui_callback: {cb_exc}", exc_info=True)
 
 
 def stop_current_speech(gui_callbacks=None):
     global current_tts_thread, tts_stop_event
 
-    if not TTS_AVAILABLE:
+    if not TTS_CAPABLE: # Check capability
         return
 
     if current_tts_thread and current_tts_thread.is_alive():
@@ -282,7 +257,7 @@ def stop_current_speech(gui_callbacks=None):
         else:
             logger.warning(f"tts_stop_event is None for alive thread '{thread_name}'. Cannot signal stop effectively.")
 
-        current_tts_thread.join(timeout=2.5)
+        current_tts_thread.join(timeout=2.5) # Wait for thread to finish
 
         if not current_tts_thread.is_alive():
             logger.info(f"Bark speech thread '{thread_name}' stopped or finished.")
@@ -296,28 +271,31 @@ def stop_current_speech(gui_callbacks=None):
         logger.debug("No active Bark speech thread to stop.")
 
 
-def shutdown_tts():
+def unload_bark_model(gui_callbacks=None): # Renamed from shutdown_tts
     global _bark_processor, _bark_model, _bark_device, _bark_resources_ready
-    global _bark_loading_in_progress, current_tts_thread, TTS_AVAILABLE
+    global _bark_loading_in_progress, current_tts_thread
 
-    logger.info("Shutdown sequence initiated for Bark TTS.")
+    logger.info("Unload sequence initiated for Bark TTS model.")
 
     if current_tts_thread and current_tts_thread.is_alive():
-        logger.info("Stopping active speech thread during TTS shutdown...")
-        stop_current_speech()
+        logger.info("Stopping active speech thread during Bark model unload...")
+        stop_current_speech(gui_callbacks) # Pass callbacks for status updates
 
     if _bark_model:
         logger.info("Releasing Bark model resources...")
         try:
             if torch_module and _bark_device == "cuda" and hasattr(_bark_model, 'cpu'):
-                _bark_model = _bark_model.cpu()
+                _bark_model = _bark_model.cpu() # Move to CPU first
                 logger.info("Moved Bark model to CPU.")
 
-            del _bark_model
+            del _bark_model # Delete reference
             _bark_model = None
             if _bark_processor:
                 del _bark_processor
                 _bark_processor = None
+            
+            import gc # Explicitly call garbage collector
+            gc.collect()
 
             if torch_module and _bark_device == "cuda" and hasattr(torch_module.cuda, 'empty_cache'):
                  torch_module.cuda.empty_cache()
@@ -327,6 +305,19 @@ def shutdown_tts():
             logger.error(f"Error during Bark model cleanup: {e}", exc_info=True)
 
     _bark_resources_ready = False
-    _bark_loading_in_progress = False
-    # TTS_AVAILABLE reflects the initial import status unless load_bark_resources critically failed.
-    logger.info("Bark TTS shutdown complete.")
+    _bark_loading_in_progress = False # Ensure this is reset
+    _bark_load_error_msg = None # Clear any previous load error
+
+    logger.info("Bark TTS model unloaded.")
+    if gui_callbacks:
+        if 'status_update' in gui_callbacks:
+            gui_callbacks['status_update']("Bark TTS model unloaded.")
+        if 'voice_status_update' in gui_callbacks:
+             gui_callbacks['voice_status_update']("VOICE: OFF", "off")
+
+# This is for full application exit, kept separate from individual model unload
+def full_shutdown_tts_module():
+    logger.info("Full Bark TTS module shutdown for application exit.")
+    unload_bark_model() # Unload model if present
+    # Any other cleanup specific to the module itself, not just the model.
+    # For Bark, unloading the model is the primary action.
