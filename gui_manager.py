@@ -2,10 +2,17 @@
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox, font as tkfont
 from datetime import datetime, date 
-import config
+import config # Assuming config.py is also in the root or accessible
+import os 
+import threading
 
 import logging
-logger = logging.getLogger("Iri-shka_App.GUIManager")
+# If logger.py is in root: from logger import get_logger
+# If logger.py is in utils: from utils.logger import get_logger
+# Assuming logger.py is in root for this example, adjust if it's in utils/
+from logger import get_logger
+logger = get_logger("Iri-shka_App.GUIManager")
+
 
 try:
     from tkcalendar import Calendar
@@ -15,6 +22,31 @@ except ImportError:
     TKCALENDAR_AVAILABLE = False
     logger.warning("tkcalendar library not found. Calendar widget will not be available.")
     logger.warning("Install it using: pip install tkcalendar")
+
+PYSTRAY_AVAILABLE = False
+pystray = None
+Image = None
+try:
+    import pystray
+    from PIL import Image
+    PYSTRAY_AVAILABLE = True
+    logger.info("pystray and Pillow imported successfully for system tray.")
+except ImportError:
+    PYSTRAY_AVAILABLE = False
+    logger.warning("pystray or Pillow not found. System tray functionality will be disabled.")
+    logger.warning("Install them using: pip install pystray pillow")
+
+MODEL_STATUS_CHECK_AVAILABLE = False
+try:
+    # If tts_manager and whisper_handler are in utils/
+    from utils import tts_manager, whisper_handler
+    # If they are in root, it would be:
+    # import tts_manager, whisper_handler
+    MODEL_STATUS_CHECK_AVAILABLE = True
+    logger.info("tts_manager and whisper_handler imported for tray status.")
+except ImportError as e:
+    MODEL_STATUS_CHECK_AVAILABLE = False
+    logger.warning(f"Could not import tts_manager or whisper_handler for tray menu status checks: {e}")
 
 
 class GUIManager:
@@ -28,7 +60,6 @@ class GUIManager:
         self.speak_button = None
         self.chat_history_display = None
         
-        # User Info Area & Kanban Widgets
         self.kanban_pending_display = None
         self.kanban_in_process_display = None
         self.kanban_finished_display = None
@@ -38,9 +69,7 @@ class GUIManager:
         self.all_calendar_events_data = [] 
         self.selected_calendar_date = date.today() 
 
-        # Status Bar Widgets (same as before)
         self.act_status_frame = None; self.act_status_text_label = None
-        # ... (other status bar widget declarations remain the same) ...
         self.inet_status_frame = None; self.inet_status_text_label = None
         self.webui_status_frame = None; self.webui_status_text_label = None
         self.tele_status_frame = None; self.tele_status_text_label = None
@@ -53,8 +82,22 @@ class GUIManager:
         self.gpu_mem_label = None
         self.gpu_util_label = None
 
-
         self.scrolled_text_widgets = []
+        
+        # --- Tray Icon ---
+        self.tray_icon = None
+        self.tray_thread = None
+        # Corrected Icon Path if gui_manager.py is in ROOT:
+        # __file__ is project_root/gui_manager.py
+        # os.path.dirname(__file__) is project_root/
+        # os.path.join(os.path.dirname(__file__), 'icon.ico') is project_root/icon.ico
+        self.icon_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'icon.ico'))
+        # If for some reason that doesn't work (e.g. when frozen with PyInstaller later),
+        # a more direct approach for root could be:
+        # self.icon_path = os.path.abspath('icon.ico') # Assumes CWD is project root
+        logger.info(f"Calculated icon path: {self.icon_path}")
+
+
         self.dark_theme_colors = {
             "bg": "#2B2B2B", "fg": "#D3D3D3", "frame_bg": "#3C3F41", "label_fg": "#E0E0E0",
             "button_bg": "#555555", "button_fg": "#FFFFFF", "button_active_bg": "#6A6A6A",
@@ -80,14 +123,13 @@ class GUIManager:
         self._setup_widgets()
         self._configure_tags_for_chat_display()
         self._setup_protocol_handlers()
+        self._setup_tray_icon() 
         logger.debug("GUIManager setup complete.")
 
     def get_current_theme_colors(self):
         return self.dark_theme_colors if self.current_theme == config.GUI_THEME_DARK else self.light_theme_colors
 
     def apply_theme(self, theme_name_to_apply, initial_setup=False):
-        # ... (theme application logic, including calendar theming, remains mostly the same) ...
-        # Ensure calendar_widget theming is robust to its absence
         logger.info(f"Applying theme: {theme_name_to_apply}. Initial setup: {initial_setup}")
         self.current_theme = theme_name_to_apply
         colors = self.get_current_theme_colors()
@@ -188,9 +230,8 @@ class GUIManager:
             if TKCALENDAR_AVAILABLE and self.calendar_widget and self.all_calendar_events_data:
                  self._mark_dates_with_events_on_calendar(self.all_calendar_events_data)
             logger.debug("Theme changed dynamically. Non-ttk widgets, tags, and font reconfigured.")
-
+    
     def _reconfigure_standard_tk_widgets(self):
-        # ... (same as before) ...
         colors = self.get_current_theme_colors()
         for st_widget in self.scrolled_text_widgets:
             if st_widget and st_widget.winfo_exists():
@@ -218,7 +259,6 @@ class GUIManager:
                 frame.configure(background=colors.get("component_status_label_default_bg", colors["frame_bg"]))
 
     def apply_chat_font_size(self, new_size):
-        # ... (same as before) ...
         if not isinstance(new_size, int) or not (config.MIN_CHAT_FONT_SIZE <= new_size <= config.MAX_CHAT_FONT_SIZE):
             logger.warning(f"Invalid font size requested: {new_size}. Clamping to default or bounds.")
             try:
@@ -241,7 +281,6 @@ class GUIManager:
             try: self.chat_history_display.configure(font=chat_font)
             except Exception as e: logger.error(f"Error applying font size to chat_history_display: {e}")
         
-        # Apply to new Kanban and existing user info lists
         text_widgets_for_side_font = [
             self.kanban_pending_display, self.kanban_in_process_display, self.kanban_finished_display,
             self.calendar_events_display, self.todo_list_display
@@ -251,20 +290,17 @@ class GUIManager:
                 try: widget.configure(font=side_panel_font)
                 except Exception as e: logger.error(f"Error applying font size to side panel widget: {e}")
 
-
     def _setup_widgets(self):
         logger.debug("Setting up GUI widgets.")
         self.app_window.title("Iri-shka: Voice AI Assistant")
-        self.app_window.geometry("1150x900") # Adjusted window size for more vertical space
+        self.app_window.geometry("1150x900") 
 
         main_frame = ttk.Frame(self.app_window, padding="10")
         main_frame.pack(expand=True, fill=tk.BOTH)
 
-        # --- Status Bar (Packed at the very bottom of main_frame) ---
         self.combined_status_bar_frame = ttk.Frame(main_frame, height=70, relief=tk.GROOVE, borderwidth=1)
         self.combined_status_bar_frame.pack(fill=tk.X, side=tk.BOTTOM, pady=(5, 0))
         self.combined_status_bar_frame.pack_propagate(False)
-        # ... (status bar content setup as in previous response, no changes here) ...
         colors = self.get_current_theme_colors() 
         component_box_width = 95; component_box_height = 28
         component_frame_bg = colors.get("component_status_label_default_bg", colors["frame_bg"])
@@ -296,28 +332,22 @@ class GUIManager:
         self.gpu_mem_label = ttk.Label(gpu_stack_frame, text="GPU Mem: N/A", style="GPUStatus.TLabel"); self.gpu_mem_label.pack(side=tk.LEFT, padx=(0,5))
         self.gpu_util_label = ttk.Label(gpu_stack_frame, text="GPU Util: N/A", style="GPUStatus.TLabel"); self.gpu_util_label.pack(side=tk.LEFT)
 
-
-        # --- User Info & Kanban Frame (Packed ABOVE status bar) ---
-        user_info_overall_height = 420 # Increased height for Kanban + taller user info row
+        user_info_overall_height = 420 
         user_info_frame = ttk.Frame(main_frame, height=user_info_overall_height)
         user_info_frame.pack(fill=tk.X, side=tk.BOTTOM, pady=(5, 5)) 
         user_info_frame.pack_propagate(False)
         
-        # Configure 3 columns with equal weight
         user_info_frame.columnconfigure(0, weight=1) 
         user_info_frame.columnconfigure(1, weight=1)
         user_info_frame.columnconfigure(2, weight=1)
-        # Configure 2 rows, give more weight to the bottom user info row
-        user_info_frame.rowconfigure(0, weight=1) # Kanban row
-        user_info_frame.rowconfigure(1, weight=3) # User info row (Calendar, Events, Todos)
+        user_info_frame.rowconfigure(0, weight=1) 
+        user_info_frame.rowconfigure(1, weight=3) 
 
-
-        # --- Kanban Row (Row 0) ---
         kanban_font_size = max(config.MIN_CHAT_FONT_SIZE -2 , self.current_chat_font_size - 3)
         kanban_font = tkfont.Font(family='Helvetica', size=kanban_font_size)
         
         kanban_scrolled_text_options = {
-            "wrap": tk.WORD, "height": 4, "state": tk.DISABLED, # Shorter height for Kanban
+            "wrap": tk.WORD, "height": 4, "state": tk.DISABLED, 
             "background": colors["entry_bg"], "foreground": colors["entry_fg"],
             "insertbackground": colors["entry_insert_bg"],
             "selectbackground": colors["entry_select_bg"],
@@ -331,32 +361,19 @@ class GUIManager:
         self.kanban_pending_display = scrolledtext.ScrolledText(kanban_pending_labelframe, **kanban_scrolled_text_options)
         self.kanban_pending_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         self.scrolled_text_widgets.append(self.kanban_pending_display)
-        # Placeholder content
-        self.kanban_pending_display.config(state=tk.NORMAL)
-        self.kanban_pending_display.insert(tk.END, "Task A\nTask B")
-        self.kanban_pending_display.config(state=tk.DISABLED)
-
 
         kanban_in_process_labelframe = ttk.LabelFrame(user_info_frame, text="In Process")
         kanban_in_process_labelframe.grid(row=0, column=1, sticky="nsew", padx=2, pady=(0,5))
         self.kanban_in_process_display = scrolledtext.ScrolledText(kanban_in_process_labelframe, **kanban_scrolled_text_options)
         self.kanban_in_process_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         self.scrolled_text_widgets.append(self.kanban_in_process_display)
-        self.kanban_in_process_display.config(state=tk.NORMAL)
-        self.kanban_in_process_display.insert(tk.END, "Task C")
-        self.kanban_in_process_display.config(state=tk.DISABLED)
 
         kanban_finished_labelframe = ttk.LabelFrame(user_info_frame, text="Finished")
         kanban_finished_labelframe.grid(row=0, column=2, sticky="nsew", padx=(2,0), pady=(0,5))
         self.kanban_finished_display = scrolledtext.ScrolledText(kanban_finished_labelframe, **kanban_scrolled_text_options)
         self.kanban_finished_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         self.scrolled_text_widgets.append(self.kanban_finished_display)
-        self.kanban_finished_display.config(state=tk.NORMAL)
-        self.kanban_finished_display.insert(tk.END, "Task D (Done)")
-        self.kanban_finished_display.config(state=tk.DISABLED)
 
-
-        # --- User Info Row (Row 1 - Calendar, Events, Todos) ---
         calendar_outer_labelframe = ttk.LabelFrame(user_info_frame, text="Calendar")
         calendar_outer_labelframe.grid(row=1, column=0, sticky="nsew", padx=(0, 2), pady=(5,0))
         if TKCALENDAR_AVAILABLE:
@@ -380,9 +397,8 @@ class GUIManager:
                 othermonthwebackground=current_colors_for_cal.get("entry_bg", "white"),
                 othermonthweforeground='gray',
                 font=('Helvetica', 9), showweeknumbers=False,
-                #relief=tk.FLAT, borderwidth=0 # Attempt to make calendar flatter
             )
-            self.calendar_widget.pack(fill=tk.BOTH, expand=True, padx=2, pady=2) # Minimal padding inside its frame
+            self.calendar_widget.pack(fill=tk.BOTH, expand=True, padx=2, pady=2) 
             self.calendar_widget.bind("<<CalendarSelected>>", self._on_date_selected)
         else:
             no_cal_label = ttk.Label(calendar_outer_labelframe, text="tkcalendar not found.\nCalendar view disabled.", justify=tk.CENTER, anchor=tk.CENTER)
@@ -392,8 +408,7 @@ class GUIManager:
         side_panel_font_size = max(config.MIN_CHAT_FONT_SIZE -1 , self.current_chat_font_size - 2)
         side_panel_font = tkfont.Font(family=chat_font_family, size=side_panel_font_size)
 
-        # Increased height for user info lists
-        user_info_list_height = 10 # Approx 30% more than previous 7
+        user_info_list_height = 10 
         
         user_info_scrolled_text_options = {
             "wrap": tk.WORD, "height": user_info_list_height, "state": tk.DISABLED,
@@ -417,9 +432,8 @@ class GUIManager:
         self.todo_list_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=(0,5))
         self.scrolled_text_widgets.append(self.todo_list_display)
 
-        # --- Chat History (Main central widget - packed ABOVE user_info_frame) ---
         chat_display_font = tkfont.Font(family=chat_font_family, size=self.current_chat_font_size)
-        chat_scrolled_text_options = user_info_scrolled_text_options.copy() # Start from user info options
+        chat_scrolled_text_options = user_info_scrolled_text_options.copy() 
         chat_scrolled_text_options["font"] = chat_display_font 
         chat_scrolled_text_options["height"] = 15 
         
@@ -431,16 +445,6 @@ class GUIManager:
         if TKCALENDAR_AVAILABLE:
             self._on_date_selected()
 
-    # ... (rest of the methods remain the same as in the previous correct response) ...
-    # _on_date_selected, _mark_dates_with_events_on_calendar, _update_filtered_event_display
-    # _configure_tags_for_chat_display, _handle_space_key_press, _setup_protocol_handlers
-    # _safe_ui_update, update_status_label, update_speak_button
-    # _update_component_status_widget_internal, and all update_XYZ_status methods
-    # update_gpu_status_display, _add_message_to_display_internal, add_user_message_to_display
-    # add_assistant_message_to_display, update_chat_display_from_list
-    # update_todo_list, update_calendar_events_list (this one calls the internal filtering/marking)
-    # show_error_messagebox, show_info_messagebox, show_warning_messagebox, destroy_window
-    
     def _on_date_selected(self, event=None):
         if not TKCALENDAR_AVAILABLE or not self.calendar_widget:
             return
@@ -524,17 +528,141 @@ class GUIManager:
             self.action_callbacks['toggle_speaking_recording']()
         else:
             logger.warning("Space key released, but 'toggle_speaking_recording' callback is missing.")
-        return "break"
+        return "break" 
+
+    def _on_close_button_override(self):
+        logger.info("Window close button clicked. Hiding window to tray.")
+        if self.app_window:
+            self.app_window.withdraw() 
+        if self.tray_icon and not self.tray_icon.visible:
+            logger.warning("Tried to hide to tray, but tray icon is not visible (or not running).")
+
 
     def _setup_protocol_handlers(self):
-        if self.app_window and 'on_exit' in self.action_callbacks:
-            logger.debug("Setting up WM_DELETE_WINDOW protocol handler.")
-            self.app_window.protocol("WM_DELETE_WINDOW", self.action_callbacks['on_exit'])
-        else:
-            logger.warning("App window or on_exit callback not available for protocol handler setup.")
         if self.app_window:
+            self.app_window.protocol("WM_DELETE_WINDOW", self._on_close_button_override)
+            logger.debug("WM_DELETE_WINDOW protocol handler set to minimize to tray.")
             self.app_window.bind("<KeyRelease-space>", self._handle_space_key_press)
             logger.info("Bound <KeyRelease-space> to toggle speaking/recording.")
+        else:
+            logger.warning("App window not available for protocol handler setup.")
+
+    def _setup_tray_icon(self):
+        if not PYSTRAY_AVAILABLE or not self.app_window:
+            logger.warning("pystray not available or app_window not set. Cannot setup tray icon.")
+            return
+
+        if not os.path.exists(self.icon_path):
+            logger.error(f"Tray icon file DOES NOT EXIST at: {self.icon_path}. System tray disabled.")
+            return
+
+        try:
+            image = Image.open(self.icon_path)
+        except FileNotFoundError: 
+            logger.error(f"Tray icon file not found (during Image.open) at: {self.icon_path}. System tray disabled.")
+            return
+        except Exception as e:
+            logger.error(f"Error loading tray icon with Pillow: {e}. System tray disabled.", exc_info=True)
+            return
+            
+        menu_items = [
+            pystray.MenuItem('Show / Hide App', self._toggle_window_visibility, default=True),
+            pystray.MenuItem('Models', pystray.Menu(
+                pystray.MenuItem('Unload Bark TTS', self._on_tray_unload_bark,
+                                 enabled=self._is_bark_loaded_for_tray), 
+                pystray.MenuItem('Reload Bark TTS', self._on_tray_reload_bark,
+                                 enabled=self._can_reload_bark_for_tray),
+                pystray.MenuItem('Unload Whisper STT', self._on_tray_unload_whisper,
+                                 enabled=self._is_whisper_loaded_for_tray),
+                pystray.MenuItem('Reload Whisper STT', self._on_tray_reload_whisper,
+                                 enabled=self._can_reload_whisper_for_tray)
+            )),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem('Exit Iri-shka', self._on_tray_exit)
+        ]
+
+        self.tray_icon = pystray.Icon("Iri-shka", image, "Iri-shka Assistant", menu_items)
+        
+        def run_tray():
+            try:
+                logger.info("pystray icon.run() called.")
+                self.tray_icon.run() # This call blocks until icon.stop()
+                logger.info("pystray icon.run() finished.")
+            except Exception as e_tray_run:
+                logger.error(f"Exception in tray_icon.run(): {e_tray_run}", exc_info=True)
+
+        self.tray_thread = threading.Thread(target=run_tray, daemon=True, name="SysTrayThread")
+        self.tray_thread.start()
+        logger.info("System tray icon thread started.")
+
+    def _is_bark_loaded_for_tray(self, item=None):
+        return MODEL_STATUS_CHECK_AVAILABLE and tts_manager.is_tts_ready()
+
+    def _can_reload_bark_for_tray(self, item=None):
+        return MODEL_STATUS_CHECK_AVAILABLE and tts_manager.TTS_CAPABLE and \
+               not tts_manager.is_tts_ready() and not tts_manager.is_tts_loading()
+
+    def _is_whisper_loaded_for_tray(self, item=None):
+        return MODEL_STATUS_CHECK_AVAILABLE and whisper_handler.whisper_model_ready
+
+    def _can_reload_whisper_for_tray(self, item=None):
+        return MODEL_STATUS_CHECK_AVAILABLE and whisper_handler.WHISPER_CAPABLE and \
+               not whisper_handler.whisper_model_ready and not whisper_handler.whisper_loading_in_progress
+
+    def _toggle_window_visibility(self, icon=None, item=None): 
+        if not self.app_window: return
+        # Use after to ensure operations are on the main Tk thread
+        self.app_window.after(0, self._do_toggle_window_visibility)
+
+    def _do_toggle_window_visibility(self):
+        if self.app_window.winfo_viewable():
+            logger.info("Hiding window from tray request.")
+            self.app_window.withdraw()
+        else:
+            logger.info("Showing window from tray request.")
+            self.app_window.deiconify()
+            self.app_window.lift()
+            self.app_window.focus_force()
+
+
+    def _on_tray_unload_bark(self):
+        logger.info("Tray: Unload Bark TTS requested.")
+        if 'unload_bark_model' in self.action_callbacks:
+            self.action_callbacks['unload_bark_model']()
+        else: logger.warning("unload_bark_model callback not found.")
+
+    def _on_tray_reload_bark(self):
+        logger.info("Tray: Reload Bark TTS requested.")
+        if 'reload_bark_model' in self.action_callbacks:
+            self.action_callbacks['reload_bark_model']()
+        else: logger.warning("reload_bark_model callback not found.")
+
+    def _on_tray_unload_whisper(self):
+        logger.info("Tray: Unload Whisper STT requested.")
+        if 'unload_whisper_model' in self.action_callbacks:
+            self.action_callbacks['unload_whisper_model']()
+        else: logger.warning("unload_whisper_model callback not found.")
+
+    def _on_tray_reload_whisper(self):
+        logger.info("Tray: Reload Whisper STT requested.")
+        if 'reload_whisper_model' in self.action_callbacks:
+            self.action_callbacks['reload_whisper_model']()
+        else: logger.warning("reload_whisper_model callback not found.")
+
+    def _on_tray_exit(self):
+        logger.info("Exit requested from system tray.")
+        # Ensure this is run on the main thread if it interacts with Tkinter directly
+        if self.app_window:
+            self.app_window.after(0, self._do_tray_exit)
+        else: # Should not happen if tray is active
+            logger.error("Tray exit called but app_window is None.")
+
+    def _do_tray_exit(self):
+        if 'on_exit' in self.action_callbacks:
+            self.action_callbacks['on_exit']() 
+        else:
+            logger.error("on_exit callback not found for tray exit. Forcing quit.")
+            if self.app_window: self.app_window.quit() 
 
     def _safe_ui_update(self, update_lambda):
         if self.app_window and self.app_window.winfo_exists():
@@ -567,57 +695,50 @@ class GUIManager:
         label_bg = colors.get("component_status_label_default_bg", colors["frame_bg"])
         label_fg = colors.get("component_status_label_default_fg", colors["fg"])
         
-        if status_category == "ready": label_bg = "#90EE90"; label_fg = "dark green"
-        elif status_category in ["loaded", "saved", "fresh", "idle", "off"]: label_bg = "#ADD8E6"; label_fg = "navy"
-        elif status_category in ["loading", "checking", "pinging", "thinking"]: label_bg = "#FFFFE0"; label_fg = "darkgoldenrod"
-        elif status_category in ["error", "na", "timeout", "conn_error", "http_502", "http_other", "InitFail", "unreachable"]: label_bg = "#FFA07A"; label_fg = "darkred"
+        if status_category == "ready": label_bg = "#90EE90"; label_fg = "dark green" 
+        elif status_category in ["loaded", "saved", "fresh", "idle"]: label_bg = "#ADD8E6"; label_fg = "navy" 
+        elif status_category == "off": label_bg = "#D3D3D3"; label_fg = "dimgray" 
+        elif status_category in ["loading", "checking", "pinging", "thinking"]: label_bg = "#FFFFE0"; label_fg = "darkgoldenrod" 
+        elif status_category in ["error", "na", "timeout", "conn_error", "http_502", "http_other", "InitFail", "unreachable"]: label_bg = "#FFA07A"; label_fg = "darkred" 
         
         widget_label.config(text=text_to_display, background=label_bg, foreground=label_fg)
 
     def update_act_status(self, short_text, status_type_str):
-        logger.debug(f"Updating ACT status: Text='{short_text}', Type='{status_type_str}'")
         self._safe_ui_update(lambda: self._update_component_status_widget_internal(
             self.act_status_frame, self.act_status_text_label, short_text, status_type_str
         ))
 
     def update_inet_status(self, short_text, status_type_str):
-        logger.debug(f"Updating INET status: Text='{short_text}', Type='{status_type_str}'")
         self._safe_ui_update(lambda: self._update_component_status_widget_internal(
             self.inet_status_frame, self.inet_status_text_label, short_text, status_type_str
         ))
 
     def update_webui_status(self, short_text, status_type_str):
-        logger.debug(f"Updating WEBUI status: Text='{short_text}', Type='{status_type_str}'")
         self._safe_ui_update(lambda: self._update_component_status_widget_internal(
             self.webui_status_frame, self.webui_status_text_label, short_text, status_type_str
         ))
 
     def update_tele_status(self, short_text, status_type_str):
-        logger.debug(f"Updating TELE status: Text='{short_text}', Type='{status_type_str}'")
         self._safe_ui_update(lambda: self._update_component_status_widget_internal(
             self.tele_status_frame, self.tele_status_text_label, short_text, status_type_str
         ))
 
     def update_memory_status(self, short_text, status_type_str):
-        logger.debug(f"Updating memory status: Text='{short_text}', Type='{status_type_str}'")
         self._safe_ui_update(lambda: self._update_component_status_widget_internal(
             self.memory_status_frame, self.memory_status_text_label, short_text, status_type_str
         ))
 
     def update_hearing_status(self, short_text, status_type_str):
-        logger.debug(f"Updating hearing status: Text='{short_text}', Type='{status_type_str}'")
         self._safe_ui_update(lambda: self._update_component_status_widget_internal(
             self.hearing_status_frame, self.hearing_status_text_label, short_text, status_type_str
         ))
 
     def update_voice_status(self, short_text, status_type_str):
-        logger.debug(f"Updating voice status: Text='{short_text}', Type='{status_type_str}'")
         self._safe_ui_update(lambda: self._update_component_status_widget_internal(
             self.voice_status_frame, self.voice_status_text_label, short_text, status_type_str
         ))
 
     def update_mind_status(self, short_text, status_type_str):
-        logger.debug(f"Updating mind status: Text='{short_text}', Type='{status_type_str}'")
         self._safe_ui_update(lambda: self._update_component_status_widget_internal(
             self.mind_status_frame, self.mind_status_text_label, short_text, status_type_str
         ))
@@ -653,9 +774,14 @@ class GUIManager:
 
     def add_assistant_message_to_display(self, text, is_error=False):
         logger.info(f"Displaying Assistant message (Error={is_error}): '{text[:70]}...'")
-        text = text + "\n" if text.endswith("\n") else text + "\n\n"
-        if not text.endswith("\n\n"): text += "\n"
-        self._safe_ui_update(lambda: self._add_message_to_display_internal(f"Iri-shka: {text}", "assistant_tag", is_error=is_error))
+        text_to_add = text 
+        if not text_to_add.endswith("\n\n"):
+            if text_to_add.endswith("\n"):
+                text_to_add += "\n"
+            else:
+                text_to_add += "\n\n"
+        self._safe_ui_update(lambda: self._add_message_to_display_internal(f"Iri-shka: {text_to_add}", "assistant_tag", is_error=is_error))
+
 
     def update_chat_display_from_list(self, chat_history_list):
         if not self.chat_history_display: return
@@ -669,8 +795,10 @@ class GUIManager:
                 if assistant_message:
                     is_error = assistant_message.startswith(("[Ollama Error:", "[LLM Error:", "[LLM Unreachable:")) or \
                                assistant_message in ("I didn't catch that, could you please repeat?", "Я не расслышала, не могли бы вы повторить?")
-                    fmt_msg = assistant_message + ("\n" if assistant_message.endswith("\n") else "\n\n")
-                    if not fmt_msg.endswith("\n\n"): fmt_msg += "\n"
+                    fmt_msg = assistant_message
+                    if not fmt_msg.endswith("\n\n"):
+                        if fmt_msg.endswith("\n"): fmt_msg += "\n"
+                        else: fmt_msg += "\n\n"
                     self._add_message_to_display_internal(f"Iri-shka: {fmt_msg}", "assistant_tag", is_error=is_error)
             self.chat_history_display.see(tk.END)
             self.chat_history_display.config(state=tk.DISABLED)
@@ -706,6 +834,33 @@ class GUIManager:
             self._mark_dates_with_events_on_calendar(self.all_calendar_events_data)
         self._update_filtered_event_display()
 
+    def _update_kanban_column(self, display_widget, tasks_list, column_name_for_log):
+        if not display_widget:
+            logger.warning(f"Kanban display widget for '{column_name_for_log}' not available.")
+            return
+        
+        logger.info(f"Updating Kanban '{column_name_for_log}' display with {len(tasks_list) if isinstance(tasks_list, list) else 0} items.")
+        def _update():
+            display_widget.config(state=tk.NORMAL)
+            display_widget.delete(1.0, tk.END)
+            if not tasks_list or not isinstance(tasks_list, list):
+                display_widget.insert(tk.END, f"No {column_name_for_log.lower()} tasks." if not tasks_list else f"Invalid data for {column_name_for_log.lower()} tasks.")
+            else:
+                for task_item in tasks_list:
+                    display_widget.insert(tk.END, f"- {str(task_item)}\n")
+            display_widget.config(state=tk.DISABLED)
+            display_widget.see(tk.END) 
+        self._safe_ui_update(_update)
+
+    def update_kanban_pending(self, tasks_list):
+        self._update_kanban_column(self.kanban_pending_display, tasks_list, "Pending")
+
+    def update_kanban_in_process(self, tasks_list):
+        self._update_kanban_column(self.kanban_in_process_display, tasks_list, "In Process")
+
+    def update_kanban_completed(self, tasks_list):
+        self._update_kanban_column(self.kanban_finished_display, tasks_list, "Completed")
+
     def show_error_messagebox(self, title, msg):
         logger.error(f"Displaying error messagebox: Title='{title}', Message='{msg}'")
         self._safe_ui_update(lambda: messagebox.showerror(title, msg, parent=self.app_window if self.app_window and self.app_window.winfo_exists() else None))
@@ -718,10 +873,28 @@ class GUIManager:
         logger.warning(f"Displaying warning messagebox: Title='{title}', Message='{msg}'")
         self._safe_ui_update(lambda: messagebox.showwarning(title, msg, parent=self.app_window if self.app_window and self.app_window.winfo_exists() else None))
 
+
     def destroy_window(self):
+        logger.info("GUIManager: destroy_window called.")
+        if self.tray_icon:
+            logger.info("Stopping system tray icon...")
+            self.tray_icon.stop() # This signals the tray_icon.run() loop to exit
+            if self.tray_thread and self.tray_thread.is_alive():
+                logger.info("Waiting for tray thread to join...")
+                self.tray_thread.join(timeout=1.5) # Increased timeout slightly
+                if self.tray_thread.is_alive():
+                    logger.warning("Tray thread did not join cleanly.")
+            self.tray_icon = None
+            self.tray_thread = None
+            logger.info("System tray icon stopped and thread joined (or timed out).")
+
         if self.app_window:
             logger.info("Destroying Tkinter window...")
-            try: self.app_window.destroy(); logger.info("Tkinter window destroyed.")
-            except tk.TclError as e: logger.warning(f"Tkinter error during destroy: {e}", exc_info=False)
+            try: 
+                self.app_window.destroy()
+                logger.info("Tkinter window destroyed.")
+            except tk.TclError as e: 
+                logger.warning(f"Tkinter error during destroy: {e}", exc_info=False)
             self.app_window = None
-        else: logger.info("Destroy window called, but no app_window instance.")
+        else: 
+            logger.info("Destroy window called, but no app_window instance.")

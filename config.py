@@ -10,7 +10,7 @@ ASSISTANT_STATE_FILE = f"{DATA_FOLDER}/assistant_state.json"
 
 # --- Ollama ---
 OLLAMA_API_URL = "http://localhost:11434/api/generate"
-OLLAMA_MODEL_NAME = "phi4" # Or "phi3" or your chosen model
+OLLAMA_MODEL_NAME = "qwen2.5vl:7b" # Or "phi3" or your chosen model
 OLLAMA_REQUEST_TIMEOUT = 180
 OLLAMA_PING_TIMEOUT = 15 # Shorter timeout for the initial health check
 OLLAMA_PING_PROMPT = "You are an AI assistant. Respond with a single word: 'ready'." # Simple prompt for health check
@@ -47,8 +47,8 @@ TIMEZONE_OFFSET_HOURS = 3 # For GMT+3. Use negative values for zones behind UTC,
 # --- GUI Themes & Font ---
 GUI_THEME_LIGHT = "light"
 GUI_THEME_DARK = "dark"
-DEFAULT_CHAT_FONT_SIZE = 10 # Default font size for chat display
-MIN_CHAT_FONT_SIZE = 8
+DEFAULT_CHAT_FONT_SIZE = 14 # Default font size for chat display
+MIN_CHAT_FONT_SIZE = 10
 MAX_CHAT_FONT_SIZE = 18
 
 
@@ -75,7 +75,11 @@ DEFAULT_ASSISTANT_STATE = {
     },
     "active_goals": ["Be a helpful assistant"],
     "knowledge_gaps_identified": [],
-    "internal_tasks": [],
+    "internal_tasks": { # MODIFIED STRUCTURE
+        "pending": ["Review today's news headlines", "Check for new software updates for myself"],
+        "in_process": ["Summarize the last conversation turn if complex"],
+        "completed": ["Initial system check completed successfully"]
+    },
     "session_summary_points": [],
     "notifications": [],
     "last_used_language": "en"
@@ -126,5 +130,11 @@ Instructions for updating state:
 - If the user asks a question, provide a concise and helpful answer in "answer_to_user".
 - If you identify a new topic, update "current_topic" in user_state.
 - Maintain your persona as Iri-shka.
+- Manage your "internal_tasks" within "updated_assistant_state". "internal_tasks" is a dictionary with three keys: "pending", "in_process", and "completed", each holding a list of task strings.
+- Example "internal_tasks" structure: {{"pending": ["task A"], "in_process": ["task B"], "completed": ["task C"]}}
+- When you decide to start working on an internal task, move it from the "pending" list to the "in_process" list.
+- When you complete an internal task, move it from the "in_process" list to the "completed" list.
+- You can add new tasks to the "pending" list if they arise from the conversation or your internal reasoning.
+- Keep your internal task lists concise and relevant. Ensure they are always lists of strings. For example, if the user asks you to search for something complex, you might add "Research topic X" to pending, then move it to in_process while you formulate the search, and then to completed once you have the answer.
 """
 # NO .format() call here for OLLAMA_PROMPT_TEMPLATE
