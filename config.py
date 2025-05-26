@@ -15,6 +15,10 @@ OLLAMA_REQUEST_TIMEOUT = 180
 OLLAMA_PING_TIMEOUT = 15 # Shorter timeout for the initial health check
 OLLAMA_PING_PROMPT = "You are an AI assistant. Respond with a single word: 'ready'." # Simple prompt for health check
 
+# --- Search Engine ---
+SEARCH_ENGINE_URL = "https://search.vovsn.com" # Base URL, path will be appended in usage
+SEARCH_ENGINE_PING_TIMEOUT = 10 # Timeout in seconds for search engine ping
+
 # --- Audio ---
 CHUNK = 1024
 FORMAT = pyaudio.paInt16
