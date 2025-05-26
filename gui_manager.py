@@ -279,12 +279,23 @@ class GUIManager:
         self.chat_history_display.tag_configure("assistant_tag", foreground=colors["assistant_msg_fg"])
         self.chat_history_display.tag_configure("assistant_tag_error", foreground=colors["assistant_error_fg"])
 
+    def _handle_space_key_press(self, event=None): # Added event=None for Tkinter compatibility
+        logger.debug("Space key released, calling toggle_speaking_recording callback.")
+        if 'toggle_speaking_recording' in self.action_callbacks:
+            self.action_callbacks['toggle_speaking_recording']()
+        else:
+            logger.warning("Space key released, but 'toggle_speaking_recording' callback is missing.")
+        return "break" # Prevents the default Tkinter space bar action on focused widgets (e.g. button activation)
+
     def _setup_protocol_handlers(self):
         if self.app_window and 'on_exit' in self.action_callbacks:
             logger.debug("Setting up WM_DELETE_WINDOW protocol handler.")
             self.app_window.protocol("WM_DELETE_WINDOW", self.action_callbacks['on_exit'])
         else:
             logger.warning("App window or on_exit callback not available for protocol handler setup.")
+        if self.app_window:
+            self.app_window.bind("<KeyRelease-space>", self._handle_space_key_press)
+            logger.info("Bound <KeyRelease-space> to toggle speaking/recording.")
 
     def _safe_ui_update(self, update_lambda):
         if self.app_window and self.app_window.winfo_exists():
