@@ -6,6 +6,7 @@ import gc
 import os
 import re
 import logging
+import requests # For search engine ping
 
 try:
     import logger as app_logger_module
@@ -44,12 +45,11 @@ user_state = {}
 assistant_state = {}
 ollama_ready = False
 current_gui_theme = config.GUI_THEME_LIGHT
-current_chat_font_size_applied = config.DEFAULT_CHAT_FONT_SIZE # Track applied font size
+current_chat_font_size_applied = config.DEFAULT_CHAT_FONT_SIZE
 
 gui_callbacks = {}
 
 def _parse_ollama_error_to_short_code(error_message_from_handler):
-    # ... (function remains the same)
     if not error_message_from_handler: return "NRDY", "error"
     lower_msg = error_message_from_handler.lower()
     if "timeout" in lower_msg: return "TMO", "timeout"
@@ -68,7 +68,6 @@ def _parse_ollama_error_to_short_code(error_message_from_handler):
 def process_recorded_audio_and_interact(recorded_sample_rate):
     global chat_history, user_state, assistant_state, ollama_ready, current_gui_theme, current_chat_font_size_applied
     logger.info(f"Processing recorded audio. Sample rate: {recorded_sample_rate} Hz.")
-    # ... (Audio processing, Whisper transcription setup as before) ...
     if not np:
         logger.error("NumPy missing during audio processing. This should not happen.")
         gui_callbacks['status_update']("NumPy missing. Please install.")
@@ -128,7 +127,6 @@ def process_recorded_audio_and_interact(recorded_sample_rate):
         selected_bark_voice_preset_for_error = config.BARK_VOICE_PRESET_EN
 
     if trans_err or not transcribed_text:
-        # ... (Handle transcription error) ...
         logger.warning(f"Transcription failed or empty. Error: {trans_err}, Text: '{transcribed_text}', Lang: {detected_language_code}")
         gui_callbacks['status_update'](f"Transcription: {trans_err or 'Empty.'} (Lang: {detected_language_code or 'N/A'})")
         user_display_text = "[Silent or Unclear Audio]"
@@ -166,7 +164,6 @@ def process_recorded_audio_and_interact(recorded_sample_rate):
         current_turn_for_history = {"user": user_display_text_with_lang}
 
         if ollama_error:
-            # ... (Handle Ollama error) ...
             logger.error(f"Ollama call failed: {ollama_error}")
             ollama_ready = False
             short_code, status_type = _parse_ollama_error_to_short_code(ollama_error)
@@ -193,7 +190,6 @@ def process_recorded_audio_and_interact(recorded_sample_rate):
             gui_callbacks['mind_status_update']("MIND: RDY", "ready")
             assistant_response_text = ollama_data["answer_to_user"]
 
-            # --- Theme Change Logic ---
             new_user_state_from_llm = ollama_data["updated_user_state"]
             new_theme_from_llm = new_user_state_from_llm.get("gui_theme", current_gui_theme)
 
@@ -211,41 +207,36 @@ def process_recorded_audio_and_interact(recorded_sample_rate):
                     logger.warning(f"LLM suggested invalid theme: '{new_theme_from_llm}'. Ignoring.")
                     new_user_state_from_llm["gui_theme"] = current_gui_theme
             
-            # --- Font Size Change Logic ---
             new_font_size_from_llm = new_user_state_from_llm.get("chat_font_size", current_chat_font_size_applied)
             try:
-                new_font_size_from_llm = int(new_font_size_from_llm) # Ensure it's an int
+                new_font_size_from_llm = int(new_font_size_from_llm)
             except (ValueError, TypeError):
                 logger.warning(f"LLM provided non-integer font size: '{new_font_size_from_llm}'. Using current: {current_chat_font_size_applied}")
                 new_font_size_from_llm = current_chat_font_size_applied
-                new_user_state_from_llm["chat_font_size"] = current_chat_font_size_applied # Correct in state
+                new_user_state_from_llm["chat_font_size"] = current_chat_font_size_applied
 
             if new_font_size_from_llm != current_chat_font_size_applied:
-                # Validate size before applying
                 if not (config.MIN_CHAT_FONT_SIZE <= new_font_size_from_llm <= config.MAX_CHAT_FONT_SIZE):
                     logger.warning(f"LLM font size {new_font_size_from_llm} out of range ({config.MIN_CHAT_FONT_SIZE}-{config.MAX_CHAT_FONT_SIZE}). Clamping.")
                     new_font_size_from_llm = max(config.MIN_CHAT_FONT_SIZE, min(new_font_size_from_llm, config.MAX_CHAT_FONT_SIZE))
-                    new_user_state_from_llm["chat_font_size"] = new_font_size_from_llm # Update state with clamped value
+                    new_user_state_from_llm["chat_font_size"] = new_font_size_from_llm
                 
                 logger.info(f"Font size change requested. From '{current_chat_font_size_applied}' to '{new_font_size_from_llm}'.")
                 if gui and 'apply_chat_font_size' in gui_callbacks:
                     gui_callbacks['apply_chat_font_size'](new_font_size_from_llm)
-                    current_chat_font_size_applied = new_font_size_from_llm # Update global tracker
+                    current_chat_font_size_applied = new_font_size_from_llm
                     logger.info(f"Chat font size changed to {current_chat_font_size_applied}.")
                 else:
                     logger.warning("Cannot change font size: GUI or callback not found.")
             
-            # Update global states with data from LLM
             user_state = new_user_state_from_llm
             assistant_state = ollama_data["updated_assistant_state"]
             assistant_state["last_used_language"] = current_lang_code_for_state
 
-            # Ensure user_state has the actual applied theme and font size before saving
             if user_state.get("gui_theme") != current_gui_theme:
                 user_state["gui_theme"] = current_gui_theme
             if user_state.get("chat_font_size") != current_chat_font_size_applied:
                 user_state["chat_font_size"] = current_chat_font_size_applied
-            # --- End Theme and Font Size Update ---
 
             logger.debug(f"User state updated from LLM: {str(user_state)[:200]}...")
             logger.debug(f"Assistant state updated from LLM: {str(assistant_state)[:200]}...")
@@ -257,7 +248,6 @@ def process_recorded_audio_and_interact(recorded_sample_rate):
                 gui_callbacks['update_calendar_events_list'](user_state.get("calendar_events", []))
 
             current_turn_for_history["assistant"] = assistant_response_text
-            # ... (TTS logic) ...
             if tts_manager.is_tts_ready():
                 logger.debug("TTS is ready. Setting up deferred display for assistant message.")
                 captured_response_text = assistant_response_text
@@ -276,7 +266,6 @@ def process_recorded_audio_and_interact(recorded_sample_rate):
     chat_history = state_manager.save_states(chat_history, user_state, assistant_state, gui_callbacks)
     gui_callbacks['memory_status_update']("MEM: SAVED", "saved")
 
-    # ... (Rest of TTS invocation and final status updates) ...
     if tts_manager.is_tts_ready():
         tts_manager.start_speaking_response(
             assistant_response_text,
@@ -305,7 +294,6 @@ def process_recorded_audio_and_interact(recorded_sample_rate):
     logger.info("--- End of interaction processing ---")
 
 
-# ... (toggle_speaking_recording, on_app_exit, load_all_models_sequentially remain the same) ...
 def toggle_speaking_recording():
     logger.info(f"Toggle speaking/recording requested. Currently recording: {audio_processor.is_recording_active()}")
     if not np:
@@ -373,13 +361,62 @@ def on_app_exit():
     logger.info("Application exit sequence fully complete.")
     logging.shutdown()
 
+def check_search_engine_status():
+    """Pings the search engine and returns status for GUI."""
+    # Use /search endpoint as per SearXNG typical API
+    url = config.SEARCH_ENGINE_URL.rstrip('/') + '/search'
+    # A very simple query just to check connectivity and if the endpoint is alive
+    params = {'q': 'ping', 'format': 'json'}
+    short_text_prefix = "INET: "
+    
+    logger.info(f"Pinging Search Engine at {url} with params {params}")
+    try:
+        # Add User-Agent to mimic a browser to avoid potential blocks on some servers
+        headers = {'User-Agent': 'Iri-shka_AI_Assistant/1.0'}
+        response = requests.get(url, params=params, headers=headers, timeout=config.SEARCH_ENGINE_PING_TIMEOUT)
+        response.raise_for_status() # Check for HTTP errors (4xx or 5xx)
+        
+        # Optionally, try to parse JSON if format=json is expected to always return parsable JSON
+        try:
+            response.json() # Just to see if it's valid JSON
+            logger.info(f"Search Engine ping successful (Status {response.status_code}), response is valid JSON.")
+        except requests.exceptions.JSONDecodeError:
+            logger.warning(f"Search Engine ping successful (Status {response.status_code}), but response was not valid JSON. Content: {response.text[:100]}...")
+            # Still consider it "RDY" if status code is OK, as search might return HTML on some non-fatal errors.
+            
+        return f"{short_text_prefix}RDY", "ready"
+    except requests.exceptions.Timeout:
+        logger.error(f"Search Engine ping timeout ({config.SEARCH_ENGINE_PING_TIMEOUT}s).")
+        return f"{short_text_prefix}TMO", "timeout"
+    except requests.exceptions.ConnectionError as ce:
+        logger.error(f"Search Engine connection error: {ce}")
+        return f"{short_text_prefix}CON", "conn_error"
+    except requests.exceptions.HTTPError as e:
+        logger.error(f"Search Engine HTTP error: {e.response.status_code}.")
+        return f"{short_text_prefix}H{e.response.status_code}", "http_other"
+    except Exception as e:
+        logger.error(f"Search Engine unexpected error: {e}", exc_info=True)
+        return f"{short_text_prefix}ERR", "error"
+
 
 def load_all_models_sequentially():
     global ollama_ready, chat_history, assistant_state
-    logger.info("--- Starting sequential model loading thread ---")
+    logger.info("--- Starting sequential model loading/checking thread ---")
 
     gui_callbacks['status_update']("Initializing components...")
     gui_callbacks['speak_button_update'](False, "Loading...")
+
+    # Initialize placeholder statuses
+    gui_callbacks['act_status_update']("ACT: IDLE", "idle") # Using "idle" as status_type
+    gui_callbacks['webui_status_update']("WEBUI: OFF", "off") # Using "off" as status_type
+    gui_callbacks['tele_status_update']("TELE: OFF", "off") # Using "off" as status_type
+
+    # Check Search Engine (INET)
+    logger.info("Checking INET (Search Engine) status...")
+    gui_callbacks['inet_status_update']("INET: CHK", "checking")
+    inet_short_text, inet_status_type = check_search_engine_status()
+    gui_callbacks['inet_status_update'](inet_short_text, inet_status_type)
+
 
     if not chat_history: gui_callbacks['memory_status_update']("MEM: FRESH", "fresh")
     else: gui_callbacks['memory_status_update']("MEM: LOADED", "loaded")
@@ -436,7 +473,7 @@ def load_all_models_sequentially():
         logger.warning("Whisper model not ready after loading sequence. Speak button disabled.")
         gui_callbacks['speak_button_update'](False, "HEAR NRDY")
         gui_callbacks['status_update']("Hearing module not ready.")
-    logger.info("--- Sequential model loading thread finished ---")
+    logger.info("--- Sequential model loading/checking thread finished ---")
 
 
 if __name__ == "__main__":
@@ -453,7 +490,6 @@ if __name__ == "__main__":
     chat_history, user_state, assistant_state = state_manager.load_initial_states(gui_callbacks=None)
     logger.info("Initial states loaded.")
 
-    # Determine initial theme from loaded state
     initial_theme_from_state = user_state.get("gui_theme", config.DEFAULT_USER_STATE["gui_theme"])
     if initial_theme_from_state not in [config.GUI_THEME_LIGHT, config.GUI_THEME_DARK]:
         logger.warning(f"Invalid theme '{initial_theme_from_state}' in user_state.json. Defaulting to '{config.GUI_THEME_LIGHT}'.")
@@ -462,7 +498,6 @@ if __name__ == "__main__":
     current_gui_theme = initial_theme_from_state
     logger.info(f"Initial GUI theme set to: {current_gui_theme}")
 
-    # Determine initial font size from loaded state
     initial_font_size_state = user_state.get("chat_font_size", config.DEFAULT_USER_STATE["chat_font_size"])
     try:
         initial_font_size_state = int(initial_font_size_state)
@@ -472,7 +507,7 @@ if __name__ == "__main__":
     except (ValueError, TypeError):
         logger.warning(f"Invalid font size '{initial_font_size_state}' in user_state.json. Defaulting.")
         initial_font_size_state = config.DEFAULT_CHAT_FONT_SIZE
-    user_state["chat_font_size"] = initial_font_size_state # Ensure state has validated int
+    user_state["chat_font_size"] = initial_font_size_state
     current_chat_font_size_applied = initial_font_size_state
     logger.info(f"Initial chat font size set to: {current_chat_font_size_applied}")
 
@@ -485,7 +520,7 @@ if __name__ == "__main__":
     try:
         gui = GUIManager(app_tk_instance, action_callbacks_for_gui, 
                          initial_theme=current_gui_theme, 
-                         initial_font_size=current_chat_font_size_applied) # Pass initial font size
+                         initial_font_size=current_chat_font_size_applied)
         logger.info("GUIManager initialized successfully.")
     except Exception as e_gui:
         logger.critical(f"Failed to initialize GUIManager: {e_gui}", exc_info=True)
@@ -497,10 +532,17 @@ if __name__ == "__main__":
     logger.debug("Populating GUI callbacks dictionary...")
     gui_callbacks['status_update'] = gui.update_status_label
     gui_callbacks['speak_button_update'] = gui.update_speak_button
+    # Row 1 status callbacks
+    gui_callbacks['act_status_update'] = gui.update_act_status
+    gui_callbacks['inet_status_update'] = gui.update_inet_status
+    gui_callbacks['webui_status_update'] = gui.update_webui_status
+    gui_callbacks['tele_status_update'] = gui.update_tele_status
+    # Row 2 status callbacks
     gui_callbacks['memory_status_update'] = gui.update_memory_status
     gui_callbacks['hearing_status_update'] = gui.update_hearing_status
     gui_callbacks['voice_status_update'] = gui.update_voice_status
     gui_callbacks['mind_status_update'] = gui.update_mind_status
+    
     gui_callbacks['messagebox_error'] = gui.show_error_messagebox
     gui_callbacks['messagebox_info'] = gui.show_info_messagebox
     gui_callbacks['messagebox_warn'] = gui.show_warning_messagebox
@@ -511,7 +553,7 @@ if __name__ == "__main__":
     gui_callbacks['update_todo_list'] = gui.update_todo_list
     gui_callbacks['update_calendar_events_list'] = gui.update_calendar_events_list
     gui_callbacks['apply_application_theme'] = gui.apply_theme
-    gui_callbacks['apply_chat_font_size'] = gui.apply_chat_font_size # New callback for font size
+    gui_callbacks['apply_chat_font_size'] = gui.apply_chat_font_size
     gui_callbacks['update_chat_display_from_list'] = gui.update_chat_display_from_list
 
     logger.info("GUI callbacks dictionary populated.")
@@ -529,7 +571,6 @@ if __name__ == "__main__":
     if 'update_calendar_events_list' in gui_callbacks:
         gui_callbacks['update_calendar_events_list'](user_state.get("calendar_events", []))
 
-    # ... (GPU Monitor, Model Loader Thread, Mainloop as before) ...
     logger.info("Initializing GPU Monitor...")
     if gpu_monitor.PYNVML_AVAILABLE:
         _active_gpu_monitor = gpu_monitor.get_gpu_monitor_instance(
