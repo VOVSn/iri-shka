@@ -2,15 +2,14 @@
 import requests
 import json
 from datetime import datetime, timezone, timedelta
-import config # Import config to access OLLAMA_PROMPT_TEMPLATE and other constants
+import config 
 
-# Assuming logger.py is in the same 'utils' directory or accessible
-from logger import get_logger
+from logger import get_logger 
 
-logger = get_logger(__name__)
+
+logger = get_logger("Iri-shka_App.OllamaHandler")
 
 def check_ollama_server_and_model():
-    # ... (this function remains the same) ...
     payload = {
         "model": config.OLLAMA_MODEL_NAME,
         "prompt": config.OLLAMA_PING_PROMPT,
@@ -50,7 +49,10 @@ def check_ollama_server_and_model():
         logger.error(msg, exc_info=False)
         return False, msg
     except json.JSONDecodeError as je:
-        msg = f"Invalid JSON in Ollama ping response. Response text: {response.text[:200] if 'response' in locals() and hasattr(response, 'text') else 'N/A'}"
+        response_text_snippet = "N/A"
+        if 'response' in locals() and hasattr(response, 'text'): # Check if response variable exists and has text
+            response_text_snippet = response.text[:200]
+        msg = f"Invalid JSON in Ollama ping response. Response text: {response_text_snippet}"
         logger.error(msg, exc_info=True)
         return False, msg
     except Exception as e:
@@ -64,16 +66,22 @@ def call_ollama_for_chat_response(transcribed_text, chat_history, user_state, as
     recent_history = chat_history[-(config.MAX_HISTORY_TURNS):]
     chat_log_parts = []
     for turn in recent_history:
-        chat_log_parts.append(f"User: {turn['user']}")
+        source_prefix = "User (Telegram): " if turn.get("source") == "telegram" else "User: "
+        chat_log_parts.append(f"{source_prefix}{turn['user']}")
         if turn.get('assistant'):
-             chat_log_parts.append(f"Iri-shka: {turn['assistant']}")
+             assistant_prefix = "Iri-shka (to Telegram): " if turn.get("source") == "telegram" else "Iri-shka: "
+             chat_log_parts.append(f"{assistant_prefix}{turn['assistant']}")
     chat_log_string = "\n".join(chat_log_parts)
 
     target_timezone = timezone(timedelta(hours=config.TIMEZONE_OFFSET_HOURS))
     now_in_target_timezone = datetime.now(target_timezone)
     current_time_string = now_in_target_timezone.strftime("%A, %Y-%m-%d %H:%M:%S")
 
-    # ALL formatting happens here
+    # Ensure assistant_state for prompt is a deep copy to avoid modifying original if not intended
+    # For the prompt, we pass a stringified version, so original dict is safe.
+    # However, the LLM might be instructed to update assistant_state["telegram_bot_status"]
+    # For now, main.py updates this based on TelegramBotHandler's actual status after LLM response.
+
     prompt_for_ollama = config.OLLAMA_PROMPT_TEMPLATE.format(
         language_instruction=language_instruction_for_llm,
         current_time_string=current_time_string,
@@ -100,7 +108,7 @@ def call_ollama_for_chat_response(transcribed_text, chat_history, user_state, as
         gui_callbacks['status_update'](f"Querying {config.OLLAMA_MODEL_NAME}...")
 
     logger.info(f"Sending request to Ollama ({config.OLLAMA_MODEL_NAME}). User said '{transcribed_text[:100]}...'")
-    logger.debug(f"Full Ollama Prompt for model {config.OLLAMA_MODEL_NAME}:\n{prompt_for_ollama}")
+    # logger.debug(f"Full Ollama Prompt for model {config.OLLAMA_MODEL_NAME}:\n{prompt_for_ollama}") # Can be very verbose
 
     try:
         response = requests.post(config.OLLAMA_API_URL, json=payload, timeout=config.OLLAMA_REQUEST_TIMEOUT)
@@ -115,7 +123,7 @@ def call_ollama_for_chat_response(transcribed_text, chat_history, user_state, as
         try:
             ollama_json_output = json.loads(response_json_str)
         except json.JSONDecodeError as je:
-            err_msg = f"Ollama's 'response' field content was not valid JSON: {je}. Received text: {response_json_str[:200]}..."
+            err_msg = f"Ollama's 'response' field content was not valid JSON: {je}. Received text: {response_json_str[:500]}..." # Increased snippet length
             logger.error(err_msg, exc_info=True)
             return None, f"Error: Ollama returned invalid JSON in 'response' field."
 
@@ -146,8 +154,11 @@ def call_ollama_for_chat_response(transcribed_text, chat_history, user_state, as
             error_detail += f" - (Non-JSON error response: {e.response.text[:100]})"
         logger.error(f"Ollama HTTPError: {error_detail}", exc_info=False)
         return None, f"Error: {error_detail}"
-    except json.JSONDecodeError as je:
-        err_msg = f"Ollama main response (outer structure) was not JSON. Response text: {response.text[:200] if 'response' in locals() and hasattr(response, 'text') else 'N/A'}"
+    except json.JSONDecodeError as je: # Error parsing the main response structure (not the 'response' field's content)
+        response_text_snippet = "N/A"
+        if 'response' in locals() and hasattr(response, 'text'):
+            response_text_snippet = response.text[:200]
+        err_msg = f"Ollama main response (outer structure) was not JSON. Response text: {response_text_snippet}"
         logger.error(err_msg, exc_info=True)
         return None, f"Error: {err_msg}"
     except Exception as e:

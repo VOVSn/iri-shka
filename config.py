@@ -1,5 +1,10 @@
 # config.py
 import pyaudio
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # --- File Paths ---
 DATA_FOLDER = "data"
@@ -9,8 +14,8 @@ USER_STATE_FILE = f"{DATA_FOLDER}/user_state.json"
 ASSISTANT_STATE_FILE = f"{DATA_FOLDER}/assistant_state.json"
 
 # --- Ollama ---
-OLLAMA_API_URL = "http://localhost:11434/api/generate"
-OLLAMA_MODEL_NAME = "qwen2.5vl:7b" # Or "phi3" or your chosen model
+OLLAMA_API_URL = os.getenv("OLLAMA_API_URL", "http://localhost:11434/api/generate")
+OLLAMA_MODEL_NAME = "gemma3:12b" # Or "phi3" or your chosen model
 OLLAMA_REQUEST_TIMEOUT = 180
 OLLAMA_PING_TIMEOUT = 15 # Shorter timeout for the initial health check
 OLLAMA_PING_PROMPT = "You are an AI assistant. Respond with a single word: 'ready'." # Simple prompt for health check
@@ -18,6 +23,13 @@ OLLAMA_PING_PROMPT = "You are an AI assistant. Respond with a single word: 'read
 # --- Search Engine ---
 SEARCH_ENGINE_URL = "https://search.vovsn.com" # Base URL, path will be appended in usage
 SEARCH_ENGINE_PING_TIMEOUT = 10 # Timeout in seconds for search engine ping
+
+# --- Telegram Bot ---
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_ADMIN_USER_ID = os.getenv("TELEGRAM_ADMIN_USER_ID", "") # User ID of the admin
+TELEGRAM_POLLING_TIMEOUT = 20 # Seconds for telegram bot long polling timeout
+TELEGRAM_START_MESSAGE = "Hi there! I'm Iri-shka, your friendly AI assistant, connected via Telegram. How can I help you today?"
+START_BOT_ON_APP_START = True # Whether to start the Telegram bot automatically when the app starts
 
 # --- Audio ---
 CHUNK = 1024
@@ -31,7 +43,7 @@ SAVE_RECORDINGS_TO_WAV = False # Set to True if you want to save .wav files
 WHISPER_MODEL_SIZE = "medium" # "tiny", "base", "small", "medium", "large"
 
 # --- Bark TTS ---
-BARK_MODEL_NAME = "suno/bark-small"
+BARK_MODEL_NAME = "suno/bark-small" # This can be a local path like "./bark" if models are there
 BARK_VOICE_PRESET_RU = "v2/ru_speaker_6"  # Russian female voice
 BARK_VOICE_PRESET_EN = "v2/en_speaker_9"  # English female voice (example, ensure this exists or use another like en_speaker_0)
 BARK_MAX_SENTENCES_PER_CHUNK = 2
@@ -54,7 +66,7 @@ MAX_CHAT_FONT_SIZE = 18
 
 # --- Default State Blueprints ---
 DEFAULT_USER_STATE = {
-    "name": "need to ask name first",
+    "name": "unknown",
     "current_topic": "",
     "topics_discussed": [],
     "user_sentiment_summary": "positive",
@@ -73,16 +85,17 @@ DEFAULT_ASSISTANT_STATE = {
         "thoughtfulness": 0.4, "excitement": 0.1, "surprise": 0.1, "sadness": 0.0,
         "fear": 0.0, "anger": 0.0, "empathy": 0.4, "calmness": 0.5
     },
-    "active_goals": ["Be a helpful assistant"],
+    "active_goals": ["Be a helpful partner"],
     "knowledge_gaps_identified": [],
-    "internal_tasks": { # MODIFIED STRUCTURE
+    "internal_tasks": {
         "pending": ["Review today's news headlines", "Check for new software updates for myself"],
         "in_process": ["Summarize the last conversation turn if complex"],
         "completed": ["Initial system check completed successfully"]
     },
     "session_summary_points": [],
     "notifications": [],
-    "last_used_language": "en"
+    "last_used_language": "ru",
+    "telegram_bot_status": "polling" # Possible values: "off", "loading", "polling", "error", "no_token", "no_admin"
 }
 
 # --- Prompt Templates ---
@@ -92,8 +105,8 @@ LANGUAGE_INSTRUCTION_RUSSIAN = "The user is speaking Russian. Please respond cle
 # Define OLLAMA_PROMPT_TEMPLATE as a raw string.
 # ALL formatting will happen in ollama_handler.py.
 OLLAMA_PROMPT_TEMPLATE = """
-You are Iri-shka, a helpful female assistant.
-Your goal is to have a natural, helpful conversation and manage your state.
+You are Iri-shka, a helpful female partner.
+Your goal is to have a natural, helpful conversation and manage your state and your partner's notes and events.
 {language_instruction}
 
 Current time is: {current_time_string}
@@ -107,7 +120,7 @@ This is the user's current state:
 This is your (Iri-shka's) current internal state:
 {assistant_state_string}
 
-The user just said: "{last_transcribed_text}"
+The user just said (potentially via voice, text, or Telegram): "{last_transcribed_text}"
 
 Based on all the above information, please provide ONLY a valid JSON response with the following structure.
 Do NOT include any text before or after the JSON object. Ensure the JSON is well-formed.
@@ -136,5 +149,7 @@ Instructions for updating state:
 - When you complete an internal task, move it from the "in_process" list to the "completed" list.
 - You can add new tasks to the "pending" list if they arise from the conversation or your internal reasoning.
 - Keep your internal task lists concise and relevant. Ensure they are always lists of strings. For example, if the user asks you to search for something complex, you might add "Research topic X" to pending, then move it to in_process while you formulate the search, and then to completed once you have the answer.
+- If the user interacts via Telegram, your response in "answer_to_user" will be sent back to them on Telegram.
+- Your internal state 'telegram_bot_status' reflects the current status of your Telegram interface (e.g., 'polling', 'off', 'error'). You generally don't need to change this directly; it's managed by the system. However, you can be aware of it.
 """
 # NO .format() call here for OLLAMA_PROMPT_TEMPLATE
