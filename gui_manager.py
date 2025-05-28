@@ -45,9 +45,14 @@ try:
 except ImportError as e:
     # Don't set both to False if only one fails, but log the specific issue
     if 'tts_manager' not in str(e) and 'whisper_handler' not in str(e):
-        TELEGRAM_STATUS_CHECK_AVAILABLE = False
+        TELEGRAM_STATUS_CHECK_AVAILABLE = False # This logic was flawed, if tts_manager fails, model check is false.
     if 'telegram_handler' not in str(e):
-        MODEL_STATUS_CHECK_AVAILABLE = False # If tts or whisper failed
+        TELEGRAM_STATUS_CHECK_AVAILABLE = False
+    # Corrected logic:
+    if 'tts_manager' in str(e) or 'whisper_handler' in str(e):
+        MODEL_STATUS_CHECK_AVAILABLE = False
+    if 'telegram_handler' in str(e):
+        TELEGRAM_STATUS_CHECK_AVAILABLE = False
     
     logger.warning(f"Could not import one or more modules (tts, whisper, telegram) for tray status: {e}")
 
@@ -97,7 +102,7 @@ class GUIManager:
             "button_bg": "#555555", "button_fg": "#FFFFFF", "button_active_bg": "#6A6A6A",
             "button_disabled_fg": "#888888", "entry_bg": "#333333", "entry_fg": "#D3D3D3",
             "entry_insert_bg": "#FFFFFF", 
-            "entry_select_bg": "#0078D7", "entry_select_fg": "#FFFFFF", # Corrected keys were here
+            "entry_select_bg": "#0078D7", "entry_select_fg": "#FFFFFF", 
             "user_msg_fg": "sky blue", "assistant_msg_fg": "light green", "assistant_error_fg": "salmon",
             "component_status_label_default_bg": "#4A4A4A", "component_status_label_default_fg": "#CCCCCC",
             "calendar_event_mark_bg": "sky blue",
@@ -107,8 +112,8 @@ class GUIManager:
             "label_fg": "SystemWindowText", "button_bg": "SystemButtonFace", "button_fg": "SystemButtonText",
             "button_active_bg": "SystemHighlight", "button_disabled_fg": "SystemGrayText",
             "entry_bg": "white", "entry_fg": "black", "entry_insert_bg": "black",
-            "entry_select_bg": "SystemHighlight",       # Corrected key from "selectbackground"
-            "entry_select_fg": "SystemHighlightText",   # Corrected key from "selectforeground"
+            "entry_select_bg": "SystemHighlight",       
+            "entry_select_fg": "SystemHighlightText",   
             "user_msg_fg": "blue", "assistant_msg_fg": "green", "assistant_error_fg": "orange red",
             "component_status_label_default_bg": "SystemButtonFace", "component_status_label_default_fg": "SystemWindowText",
             "calendar_event_mark_bg": "light sky blue",
@@ -182,7 +187,7 @@ class GUIManager:
 
         else: # Light Theme
             logger.debug("Configuring Light Theme styles (using preferred built-in).")
-            preferred_themes = ['clam', 'vista', 'alt', 'default', 'classic'] # 'xpnative' could also be an option
+            preferred_themes = ['clam', 'vista', 'alt', 'default', 'classic'] 
             chosen_theme = None
             current_themes = style.theme_names()
             for theme_name_option in preferred_themes:
@@ -196,20 +201,17 @@ class GUIManager:
                         logger.warning(f"Could not use theme '{theme_name_option}': {e}")
             if not chosen_theme:
                 logger.warning("Could not set a preferred ttk theme for Light mode. Using system default.")
-                if current_themes: style.theme_use(current_themes[0]) # Fallback to first available
+                if current_themes: style.theme_use(current_themes[0]) 
             
-            # Reset specific styles to ensure they use the chosen theme's defaults or our overrides
             style.configure("Speak.TButton", padding=(10,5), font=('Helvetica', 11, 'bold'))
             style.configure("TButton", padding=6, font=('Helvetica', 10))
             try: style.configure("TLabelFrame.Label", font=('Helvetica', 9, 'bold'))
-            except tk.TclError: pass # Some themes might not support this sub-style
+            except tk.TclError: pass 
             style.configure("AppStatus.TLabel", padding=(6,3), font=('Helvetica', 10), anchor="w")
             style.configure("GPUStatus.TLabel", font=('Consolas', 9), padding=(3,3), anchor="w")
             style.configure("ComponentStatus.TLabel", font=('Consolas', 9, 'bold'), anchor="center")
             
             if TKCALENDAR_AVAILABLE and self.calendar_widget:
-                # For light theme, tkcalendar might look better with more default-like system colors
-                # or specific light theme color definitions if 'System*' values don't work well.
                 self.calendar_widget.configure(
                     background=colors.get("frame_bg", "SystemButtonFace"), 
                     foreground=colors.get("fg", "SystemWindowText"),
@@ -217,23 +219,23 @@ class GUIManager:
                     headersbackground=colors.get("frame_bg", "SystemButtonFace"),
                     headersforeground=colors.get("fg", "SystemWindowText"),
                     selectbackground=colors.get("button_active_bg", "SystemHighlight"),
-                    selectforeground=colors.get("button_fg", "SystemHighlightText"), # Corrected this to button_fg
+                    selectforeground=colors.get("button_fg", "SystemHighlightText"), 
                     normalbackground=colors.get("entry_bg", "white"),
-                    normalforeground=colors.get("fg", "black"), # Corrected this to fg
+                    normalforeground=colors.get("fg", "black"), 
                     weekendbackground=colors.get("entry_bg", "white"),
-                    weekendforeground=colors.get("fg", "black"), # Corrected this to fg
+                    weekendforeground=colors.get("fg", "black"), 
                     othermonthbackground=colors.get("entry_bg", "white"),
-                    othermonthforeground='gray', # Standard gray for other months
+                    othermonthforeground='gray', 
                     othermonthwebackground=colors.get("entry_bg", "white"),
-                    othermonthweforeground='gray' # Standard gray for other months' weekends
+                    othermonthweforeground='gray' 
                 )
 
         if not initial_setup and self.app_window:
             self._reconfigure_standard_tk_widgets()
-            self._configure_tags_for_chat_display() # Re-apply tags based on new theme colors
-            self.apply_chat_font_size(self.current_chat_font_size) # Re-apply font size
+            self._configure_tags_for_chat_display() 
+            self.apply_chat_font_size(self.current_chat_font_size) 
             if TKCALENDAR_AVAILABLE and self.calendar_widget and self.all_calendar_events_data:
-                 self._mark_dates_with_events_on_calendar(self.all_calendar_events_data) # Re-mark dates
+                 self._mark_dates_with_events_on_calendar(self.all_calendar_events_data) 
             logger.debug("Theme changed dynamically. Non-ttk widgets, tags, and font reconfigured.")
     
     def _reconfigure_standard_tk_widgets(self):
@@ -245,30 +247,27 @@ class GUIManager:
                         background=colors["entry_bg"],
                         foreground=colors["entry_fg"],
                         insertbackground=colors["entry_insert_bg"],
-                        selectbackground=colors["entry_select_bg"], # Uses corrected key
-                        selectforeground=colors["entry_select_fg"]  # Uses corrected key
+                        selectbackground=colors["entry_select_bg"], 
+                        selectforeground=colors["entry_select_fg"]  
                     )
                 except tk.TclError as e:
                     logger.warning(f"Error re-theming ScrolledText widget: {e}")
 
-        tk_frames_to_theme = [ # These are tk.Frame, not ttk.Frame, so need direct configure
+        tk_frames_to_theme = [ 
             self.act_status_frame, self.inet_status_frame,
             self.webui_status_frame, self.tele_status_frame,
             self.memory_status_frame, self.hearing_status_frame,
             self.voice_status_frame, self.mind_status_frame
         ]
         if self.app_window and isinstance(self.app_window, tk.Tk):
-             self.app_window.configure(background=colors["bg"]) # Main window background
+             self.app_window.configure(background=colors["bg"]) 
         
         component_frame_bg = colors.get("component_status_label_default_bg", colors["frame_bg"])
         for frame in tk_frames_to_theme:
             if frame and frame.winfo_exists():
                 frame.configure(background=component_frame_bg)
-                # Also re-theme the ttk.Label inside these tk.Frames if needed
                 for child in frame.winfo_children():
                     if isinstance(child, ttk.Label):
-                        # ComponentStatus.TLabel style should handle fg, but bg might need explicit set if frame bg changes
-                        # However, _update_component_status_widget_internal sets specific bg/fg for status
                         pass
 
 
@@ -280,16 +279,14 @@ class GUIManager:
                 new_size = max(config.MIN_CHAT_FONT_SIZE, min(new_size, config.MAX_CHAT_FONT_SIZE))
             except (ValueError, TypeError):
                  new_size = config.DEFAULT_CHAT_FONT_SIZE
-            # Final check after potential clamping/defaulting
             if not (config.MIN_CHAT_FONT_SIZE <= new_size <= config.MAX_CHAT_FONT_SIZE):
-                new_size = config.DEFAULT_CHAT_FONT_SIZE # Ultimate fallback
+                new_size = config.DEFAULT_CHAT_FONT_SIZE 
 
         self.current_chat_font_size = new_size
         logger.info(f"Applying chat font size: {self.current_chat_font_size}")
-        chat_font_family = 'Helvetica' # Consider making this configurable or OS-dependent
+        chat_font_family = 'Helvetica' 
         chat_font = tkfont.Font(family=chat_font_family, size=self.current_chat_font_size)
         
-        # Make side panel font slightly smaller than main chat, but not too small
         side_panel_font_size = max(config.MIN_CHAT_FONT_SIZE - 1 , self.current_chat_font_size - 2)
         side_panel_font = tkfont.Font(family=chat_font_family, size=side_panel_font_size)
 
@@ -314,22 +311,19 @@ class GUIManager:
         main_frame = ttk.Frame(self.app_window, padding="10")
         main_frame.pack(expand=True, fill=tk.BOTH)
 
-        # --- Status Bar Setup ---
-        self.combined_status_bar_frame = ttk.Frame(main_frame, height=70, relief=tk.GROOVE, borderwidth=1) # ttk.Frame
+        self.combined_status_bar_frame = ttk.Frame(main_frame, height=70, relief=tk.GROOVE, borderwidth=1) 
         self.combined_status_bar_frame.pack(fill=tk.X, side=tk.BOTTOM, pady=(5, 0))
-        self.combined_status_bar_frame.pack_propagate(False) # Prevent resizing based on content
+        self.combined_status_bar_frame.pack_propagate(False) 
 
-        colors = self.get_current_theme_colors() # Get current theme colors
+        colors = self.get_current_theme_colors() 
         component_box_width = 95; component_box_height = 28
-        component_frame_bg = colors.get("component_status_label_default_bg", colors["frame_bg"]) # Default for tk.Frame bg
+        component_frame_bg = colors.get("component_status_label_default_bg", colors["frame_bg"]) 
 
-        # Left panel for component statuses (using ttk.Frame for consistency where possible)
         left_status_panel_frame = ttk.Frame(self.combined_status_bar_frame)
         left_status_panel_frame.pack(side=tk.LEFT, padx=(2,5), pady=2, fill=tk.Y)
         status_row1_frame = ttk.Frame(left_status_panel_frame); status_row1_frame.pack(side=tk.TOP, fill=tk.X)
         status_row2_frame = ttk.Frame(left_status_panel_frame); status_row2_frame.pack(side=tk.TOP, fill=tk.X, pady=(2,0))
 
-        # Status boxes (tk.Frame for fixed size and relief, containing a ttk.Label)
         self.act_status_frame = tk.Frame(status_row1_frame, width=component_box_width, height=component_box_height, relief=tk.SUNKEN, borderwidth=1, background=component_frame_bg); self.act_status_frame.pack(side=tk.LEFT, padx=(0,2), pady=0); self.act_status_frame.pack_propagate(False)
         self.act_status_text_label = ttk.Label(self.act_status_frame, text="ACT: IDLE", style="ComponentStatus.TLabel"); self.act_status_text_label.pack(expand=True, fill=tk.BOTH)
         
@@ -354,37 +348,35 @@ class GUIManager:
         self.mind_status_frame = tk.Frame(status_row2_frame, width=component_box_width, height=component_box_height, relief=tk.SUNKEN, borderwidth=1, background=component_frame_bg); self.mind_status_frame.pack(side=tk.LEFT, padx=(2,0), pady=0); self.mind_status_frame.pack_propagate(False)
         self.mind_status_text_label = ttk.Label(self.mind_status_frame, text="MIND: CHK", style="ComponentStatus.TLabel"); self.mind_status_text_label.pack(expand=True, fill=tk.BOTH)
         
-        # Right panel for Speak button and general status (using ttk.Frame)
         right_info_panel_frame = ttk.Frame(self.combined_status_bar_frame)
         right_info_panel_frame.pack(side=tk.LEFT, padx=(10,2), pady=0, fill=tk.BOTH, expand=True)
         
         self.speak_button = ttk.Button(right_info_panel_frame, text="Loading...", command=self.action_callbacks['toggle_speaking_recording'], state=tk.DISABLED, style="Speak.TButton")
         self.speak_button.pack(side=tk.RIGHT, fill=tk.Y, padx=(5,2), pady=2)
         
-        left_detail_frame = ttk.Frame(right_info_panel_frame) # Container for app_status and GPU labels
+        left_detail_frame = ttk.Frame(right_info_panel_frame) 
         left_detail_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=2, padx=(0,5))
 
-        self.app_status_label = ttk.Label(left_detail_frame, text="Initializing...", style="AppStatus.TLabel", relief=tk.FLAT) # ttk.Label
+        self.app_status_label = ttk.Label(left_detail_frame, text="Initializing...", style="AppStatus.TLabel", relief=tk.FLAT) 
         self.app_status_label.pack(side=tk.TOP, fill=tk.BOTH, expand=True, pady=(0,2))
         
-        gpu_stack_frame = ttk.Frame(left_detail_frame) # Container for GPU labels
+        gpu_stack_frame = ttk.Frame(left_detail_frame) 
         gpu_stack_frame.pack(side=tk.BOTTOM, fill=tk.X)
-        self.gpu_mem_label = ttk.Label(gpu_stack_frame, text="GPU Mem: N/A", style="GPUStatus.TLabel") # ttk.Label
+        self.gpu_mem_label = ttk.Label(gpu_stack_frame, text="GPU Mem: N/A", style="GPUStatus.TLabel") 
         self.gpu_mem_label.pack(side=tk.LEFT, padx=(0,5))
-        self.gpu_util_label = ttk.Label(gpu_stack_frame, text="GPU Util: N/A", style="GPUStatus.TLabel") # ttk.Label
+        self.gpu_util_label = ttk.Label(gpu_stack_frame, text="GPU Util: N/A", style="GPUStatus.TLabel") 
         self.gpu_util_label.pack(side=tk.LEFT)
 
-        # --- User Info Panels (Kanban, Calendar, Todos) ---
         user_info_overall_height = 420 
-        user_info_frame = ttk.Frame(main_frame, height=user_info_overall_height) # ttk.Frame
+        user_info_frame = ttk.Frame(main_frame, height=user_info_overall_height) 
         user_info_frame.pack(fill=tk.X, side=tk.BOTTOM, pady=(5, 5)) 
         user_info_frame.pack_propagate(False)
         
         user_info_frame.columnconfigure(0, weight=1) 
         user_info_frame.columnconfigure(1, weight=1)
         user_info_frame.columnconfigure(2, weight=1)
-        user_info_frame.rowconfigure(0, weight=1) # Kanban row
-        user_info_frame.rowconfigure(1, weight=3) # Calendar/Todos row (more height)
+        user_info_frame.rowconfigure(0, weight=1) 
+        user_info_frame.rowconfigure(1, weight=3) 
 
         kanban_font_family = 'Helvetica'
         kanban_font_size = max(config.MIN_CHAT_FONT_SIZE - 2 , self.current_chat_font_size - 3)
@@ -394,10 +386,10 @@ class GUIManager:
             "wrap": tk.WORD, "height": 4, "state": tk.DISABLED, 
             "background": colors["entry_bg"], "foreground": colors["entry_fg"],
             "insertbackground": colors["entry_insert_bg"],
-            "selectbackground": colors["entry_select_bg"], # Key was corrected in theme dicts
-            "selectforeground": colors["entry_select_fg"], # Key was corrected
+            "selectbackground": colors["entry_select_bg"], 
+            "selectforeground": colors["entry_select_fg"], 
             "borderwidth": 1, "relief": tk.SUNKEN,
-            "font": kanban_font # Apply specific Kanban font
+            "font": kanban_font 
         }
 
         kanban_pending_labelframe = ttk.LabelFrame(user_info_frame, text="Pending")
@@ -421,7 +413,7 @@ class GUIManager:
         calendar_outer_labelframe = ttk.LabelFrame(user_info_frame, text="Calendar")
         calendar_outer_labelframe.grid(row=1, column=0, sticky="nsew", padx=(0, 2), pady=(5,0))
         if TKCALENDAR_AVAILABLE:
-            current_colors_for_cal = self.get_current_theme_colors() # Get fresh colors for calendar init
+            current_colors_for_cal = self.get_current_theme_colors() 
             self.calendar_widget = Calendar(
                 calendar_outer_labelframe, selectmode='day', date_pattern='y-mm-dd',
                 year=self.selected_calendar_date.year, month=self.selected_calendar_date.month, day=self.selected_calendar_date.day,
@@ -449,18 +441,18 @@ class GUIManager:
             no_cal_label.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
         side_panel_font_family = 'Helvetica'
-        side_panel_font_size = max(config.MIN_CHAT_FONT_SIZE - 1 , self.current_chat_font_size - 2) # Same as in apply_chat_font_size
+        side_panel_font_size = max(config.MIN_CHAT_FONT_SIZE - 1 , self.current_chat_font_size - 2) 
         side_panel_font = tkfont.Font(family=side_panel_font_family, size=side_panel_font_size)
 
         user_info_list_height = 10 
-        user_info_scrolled_text_options = { # Options for Todos and Calendar Events displays
+        user_info_scrolled_text_options = { 
             "wrap": tk.WORD, "height": user_info_list_height, "state": tk.DISABLED,
             "background": colors["entry_bg"], "foreground": colors["entry_fg"],
             "insertbackground": colors["entry_insert_bg"],
-            "selectbackground": colors["entry_select_bg"], # Corrected key
-            "selectforeground": colors["entry_select_fg"], # Corrected key
+            "selectbackground": colors["entry_select_bg"], 
+            "selectforeground": colors["entry_select_fg"], 
             "borderwidth": 1, "relief": tk.SUNKEN,
-            "font": side_panel_font # Apply specific side panel font
+            "font": side_panel_font 
         }
 
         calendar_events_labelframe = ttk.LabelFrame(user_info_frame, text="Selected Day's Events")
@@ -475,20 +467,19 @@ class GUIManager:
         self.todo_list_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=(0,5))
         self.scrolled_text_widgets.append(self.todo_list_display)
 
-        # --- Chat History Display ---
-        chat_font_family = 'Helvetica' # Same as apply_chat_font_size
+        chat_font_family = 'Helvetica' 
         chat_display_font = tkfont.Font(family=chat_font_family, size=self.current_chat_font_size)
         
-        chat_scrolled_text_options = user_info_scrolled_text_options.copy() # Start with base options
-        chat_scrolled_text_options["font"] = chat_display_font # Override font
-        chat_scrolled_text_options["height"] = 15 # Chat display can be taller
+        chat_scrolled_text_options = user_info_scrolled_text_options.copy() 
+        chat_scrolled_text_options["font"] = chat_display_font 
+        chat_scrolled_text_options["height"] = 15 
         
         self.chat_history_display = scrolledtext.ScrolledText(main_frame, **chat_scrolled_text_options)
         self.chat_history_display.pack(pady=(0, 10), fill=tk.BOTH, expand=True)
         self.scrolled_text_widgets.append(self.chat_history_display)
 
         logger.debug("GUI widgets setup finished.")
-        if TKCALENDAR_AVAILABLE: # If calendar exists, trigger initial display for today
+        if TKCALENDAR_AVAILABLE: 
             self._on_date_selected()
 
     def _on_date_selected(self, event=None):
@@ -506,7 +497,7 @@ class GUIManager:
         if not TKCALENDAR_AVAILABLE or not self.calendar_widget:
             return
         logger.debug(f"Marking dates with events on calendar. Total events: {len(all_events)}")
-        self.calendar_widget.calevent_remove('all') # Clear previous marks
+        self.calendar_widget.calevent_remove('all') 
         event_dates = set()
         for event_item in all_events:
             if isinstance(event_item, dict) and "date" in event_item:
@@ -517,16 +508,14 @@ class GUIManager:
                     logger.warning(f"Invalid date format in event item for calendar marking: {event_item}")
         
         colors = self.get_current_theme_colors()
-        mark_bg_color = colors.get("calendar_event_mark_bg", "yellow") # Fallback color
+        mark_bg_color = colors.get("calendar_event_mark_bg", "yellow") 
         
         for dt in event_dates:
             try:
-                # Ensure the event tag is unique if multiple events are on the same day,
-                # or use a generic tag if the text itself isn't displayed.
                 self.calendar_widget.calevent_create(dt, text='', tags=['has_event'])
             except Exception as e:
                 logger.error(f"Error marking date {dt} on calendar: {e}")
-        self.calendar_widget.tag_config('has_event', background=mark_bg_color, foreground='black') # Configure the tag's appearance
+        self.calendar_widget.tag_config('has_event', background=mark_bg_color, foreground='black') 
         logger.debug(f"Marked {len(event_dates)} unique dates on the calendar.")
 
     def _update_filtered_event_display(self):
@@ -545,17 +534,16 @@ class GUIManager:
                         event_date_obj = datetime.strptime(ev["date"], "%Y-%m-%d").date()
                         if event_date_obj == self.selected_calendar_date:
                             events_for_selected_date.append(ev)
-                    except ValueError: # Skip if date format is wrong
-                        pass # Logged during marking potentially
+                    except ValueError: 
+                        pass 
             
             if not events_for_selected_date:
                 self.calendar_events_display.insert(tk.END, f"No events for {self.selected_calendar_date.strftime('%Y-%m-%d')}.")
             else:
-                # Sort events by time for the selected day
                 def _sort_key_time(e):
-                    tm_str = e.get("time", "23:59") # Default to end of day if no time
+                    tm_str = e.get("time", "23:59") 
                     try: return datetime.strptime(tm_str, "%H:%M").time()
-                    except ValueError: return datetime.strptime("23:59", "%H:%M").time() # Fallback for invalid time format
+                    except ValueError: return datetime.strptime("23:59", "%H:%M").time() 
                 
                 sorted_day_events = sorted(events_for_selected_date, key=_sort_key_time)
                 
@@ -564,7 +552,7 @@ class GUIManager:
                     event_text = f"{tm+': ' if tm else ''}{dsc}\n"
                     self.calendar_events_display.insert(tk.END, event_text)
         self.calendar_events_display.config(state=tk.DISABLED)
-        self.calendar_events_display.see(tk.END) # Scroll to the end
+        self.calendar_events_display.see(tk.END) 
 
     def _configure_tags_for_chat_display(self):
         if not self.chat_history_display:
@@ -573,45 +561,44 @@ class GUIManager:
         logger.debug("Configuring tags for chat display based on current theme.")
         colors = self.get_current_theme_colors()
         
-        # Standard tags
         self.chat_history_display.tag_configure("user_tag", foreground=colors["user_msg_fg"])
         self.chat_history_display.tag_configure("assistant_tag", foreground=colors["assistant_msg_fg"])
         self.chat_history_display.tag_configure("assistant_tag_error", foreground=colors["assistant_error_fg"])
 
-        # Telegram specific tags (can inherit or be distinct)
-        # For MVP, let's make them distinct for potential different styling later, but use same colors for now.
-        # Adding a slight indent for Telegram messages to visually distinguish them.
-        telegram_lmargin = 10 # pixels
+        telegram_lmargin = 10 
         self.chat_history_display.tag_configure("user_telegram_tag", 
                                                 foreground=colors["user_msg_fg"], 
                                                 lmargin1=telegram_lmargin, lmargin2=telegram_lmargin)
         self.chat_history_display.tag_configure("assistant_telegram_tag", 
                                                 foreground=colors["assistant_msg_fg"], 
                                                 lmargin1=telegram_lmargin, lmargin2=telegram_lmargin)
-        # Telegram errors will use "assistant_tag_error" for simplicity, or define a "assistant_telegram_tag_error" if needed.
+        # Tag for Telegram Voice messages (can be styled same as text or differently)
+        self.chat_history_display.tag_configure("user_telegram_voice_tag", 
+                                                foreground=colors["user_msg_fg"], 
+                                                lmargin1=telegram_lmargin, lmargin2=telegram_lmargin,
+                                                font=('Helvetica', self.current_chat_font_size, 'italic')) # Example: italicize
 
-    def _handle_space_key_press(self, event=None): # Bound to <KeyRelease-space>
-        # Check if focus is on a text entry widget, if so, don't trigger speak
+    def _handle_space_key_press(self, event=None): 
         try:
             focused_widget = self.app_window.focus_get()
             if isinstance(focused_widget, (tk.Entry, scrolledtext.ScrolledText, tk.Text)):
                 logger.debug("Space key released on a text input widget, not toggling speak.")
-                return # Don't "break", allow space to be typed
+                return 
         except Exception:
-            pass # If focus_get fails, proceed with toggle (safer)
+            pass 
 
         logger.debug("Space key released (not on text input), calling toggle_speaking_recording callback.")
         if 'toggle_speaking_recording' in self.action_callbacks:
             self.action_callbacks['toggle_speaking_recording']()
         else:
             logger.warning("Space key released, but 'toggle_speaking_recording' callback is missing.")
-        return "break" # Prevent space from doing anything else if it triggered speak
+        return "break" 
 
-    def _on_close_button_override(self): # WM_DELETE_WINDOW
+    def _on_close_button_override(self): 
         logger.info("Window close button clicked. Hiding window to tray.")
         if self.app_window:
-            self.app_window.withdraw() # Hide the window
-        if self.tray_icon and not self.tray_icon.visible: # Should not happen if tray is set up
+            self.app_window.withdraw() 
+        if self.tray_icon and not self.tray_icon.visible: 
             logger.warning("Tried to hide to tray, but tray icon is not visible (or not running).")
 
 
@@ -619,7 +606,6 @@ class GUIManager:
         if self.app_window:
             self.app_window.protocol("WM_DELETE_WINDOW", self._on_close_button_override)
             logger.debug("WM_DELETE_WINDOW protocol handler set to minimize to tray.")
-            # Bind to root window so it's global unless a widget takes focus and handles space.
             self.app_window.bind_all("<KeyRelease-space>", self._handle_space_key_press, add="+")
             logger.info("Bound <KeyRelease-space> globally to toggle speaking/recording (with exceptions for text inputs).")
         else:
@@ -680,8 +666,7 @@ class GUIManager:
         self.tray_thread.start()
         logger.info("System tray icon thread started.")
 
-    # --- Tray Menu Item Enable/Disable Logic ---
-    def _is_bark_loaded_for_tray(self, item=None): # item arg is for pystray compatibility
+    def _is_bark_loaded_for_tray(self, item=None): 
         return MODEL_STATUS_CHECK_AVAILABLE and tts_manager.is_tts_ready()
 
     def _can_reload_bark_for_tray(self, item=None):
@@ -698,23 +683,18 @@ class GUIManager:
     def _can_start_telegram_bot_for_tray(self, item=None):
         if not TELEGRAM_STATUS_CHECK_AVAILABLE or not app_telegram_handler_module:
             return False
-        # Get status from the telegram_handler module directly
         current_status = app_telegram_handler_module.get_telegram_bot_status()
-        # Can start if OFF, or if there was an error (NO_TOKEN, NO_ADMIN, ERR)
-        return current_status in ["off", "no_token", "no_admin", "error"]
+        return current_status in ["off", "no_token", "no_admin", "error", "bad_token", "net_error"]
 
 
     def _can_stop_telegram_bot_for_tray(self, item=None):
         if not TELEGRAM_STATUS_CHECK_AVAILABLE or not app_telegram_handler_module:
             return False
         current_status = app_telegram_handler_module.get_telegram_bot_status()
-        # Can stop if LOADING or POLLING
         return current_status in ["loading", "polling"]
 
-    # --- Tray Menu Action Handlers ---
     def _toggle_window_visibility(self, icon=None, item=None): 
         if not self.app_window: return
-        # Use after to ensure operations are on the main Tk thread
         self.app_window.after(0, self._do_toggle_window_visibility)
 
     def _do_toggle_window_visibility(self):
@@ -724,8 +704,8 @@ class GUIManager:
         else:
             logger.info("Showing window from tray request.")
             self.app_window.deiconify()
-            self.app_window.lift() # Bring to front
-            self.app_window.focus_force() # Try to force focus
+            self.app_window.lift() 
+            self.app_window.focus_force() 
 
 
     def _on_tray_unload_bark(self):
@@ -766,29 +746,26 @@ class GUIManager:
 
     def _on_tray_exit(self):
         logger.info("Exit requested from system tray.")
-        if self.app_window: # Ensure app_window exists before queuing to its thread
+        if self.app_window: 
             self.app_window.after(0, self._do_tray_exit)
         else: 
             logger.error("Tray exit called but app_window is None.")
 
-    def _do_tray_exit(self): # This runs on the main Tk thread
+    def _do_tray_exit(self): 
         if 'on_exit' in self.action_callbacks:
             self.action_callbacks['on_exit']() 
         else:
             logger.error("on_exit callback not found for tray exit. Forcing quit.")
-            if self.app_window: self.app_window.quit() # Fallback, might not clean up everything
+            if self.app_window: self.app_window.quit() 
 
     def _safe_ui_update(self, update_lambda):
-        """Schedules UI updates to run on the main Tkinter thread."""
         if self.app_window and self.app_window.winfo_exists():
             self.app_window.after(0, update_lambda)
         else:
-            # Log this warning less frequently if it becomes spammy during shutdown
             logger.warning("Attempted safe UI update, but app window no longer exists.")
 
     def update_status_label(self, msg):
         if self.app_status_label:
-            # logger.debug(f"Updating main status label to: '{msg}'") # Can be too verbose
             self._safe_ui_update(lambda: self.app_status_label.config(text=msg))
         else:
             logger.warning(f"Attempted to update status label, but app_status_label is None. Msg: '{msg}'")
@@ -804,7 +781,6 @@ class GUIManager:
             logger.warning(f"Attempted to update speak button, but speak_button is None. Enabled={enabled}, Text='{text}'")
 
     def _update_component_status_widget_internal(self, widget_frame, widget_label, text_to_display, status_category):
-        """Internal helper to update individual component status widgets."""
         if not widget_frame or not widget_label:
             logger.warning(f"Attempted to update component status, but frame or label is None. Text: '{text_to_display}', Category: '{status_category}'")
             return
@@ -813,20 +789,18 @@ class GUIManager:
         label_bg = colors.get("component_status_label_default_bg", colors["frame_bg"])
         label_fg = colors.get("component_status_label_default_fg", colors["fg"])
         
-        # Status category to color mapping
-        if status_category == "ready": label_bg = "#90EE90"; label_fg = "dark green"  # LightGreen
-        elif status_category in ["loaded", "saved", "fresh", "idle"]: label_bg = "#ADD8E6"; label_fg = "navy"  # LightBlue
-        elif status_category == "off": label_bg = "#D3D3D3"; label_fg = "dimgray"  # LightGray
-        elif status_category in ["loading", "checking", "pinging", "thinking"]: label_bg = "#FFFFE0"; label_fg = "darkgoldenrod" # LightYellow
-        elif status_category in ["error", "na", "timeout", "conn_error", "http_502", "http_other", "InitFail", "unreachable"]: label_bg = "#FFA07A"; label_fg = "darkred" # LightSalmon
+        if status_category == "ready": label_bg = "#90EE90"; label_fg = "dark green"  
+        elif status_category in ["loaded", "saved", "fresh", "idle"]: label_bg = "#ADD8E6"; label_fg = "navy"  
+        elif status_category == "off": label_bg = "#D3D3D3"; label_fg = "dimgray"  
+        elif status_category in ["loading", "checking", "pinging", "thinking"]: label_bg = "#FFFFE0"; label_fg = "darkgoldenrod" 
+        elif status_category in ["error", "na", "timeout", "conn_error", "http_502", "http_other", "InitFail", "unreachable", "bad_token", "net_error"]: label_bg = "#FFA07A"; label_fg = "darkred" 
         
-        # Telegram specific status mappings to colors
-        elif status_category == "polling": label_bg = "#90EE90"; label_fg = "dark green" # Same as "ready"
-        elif status_category == "no_token": label_bg = "#FFA07A"; label_fg = "darkred" # Same as "error" for no token
-        elif status_category == "no_admin": label_bg = "#FFA07A"; label_fg = "darkred" # Same as "error" for no admin ID
+        elif status_category == "polling": label_bg = "#90EE90"; label_fg = "dark green" 
+        elif status_category == "no_token": label_bg = "#FFA07A"; label_fg = "darkred" 
+        elif status_category == "no_admin": label_bg = "#FFA07A"; label_fg = "darkred" 
         
         widget_label.config(text=text_to_display, background=label_bg, foreground=label_fg)
-        widget_frame.config(background=label_bg) # Also set the tk.Frame background for better visual consistency
+        widget_frame.config(background=label_bg) 
 
     def update_act_status(self, short_text, status_type_str):
         self._safe_ui_update(lambda: self._update_component_status_widget_internal(
@@ -843,7 +817,7 @@ class GUIManager:
             self.webui_status_frame, self.webui_status_text_label, short_text, status_type_str
         ))
 
-    def update_tele_status(self, short_text, status_type_str): # e.g., "TELE: POLL", "polling"
+    def update_tele_status(self, short_text, status_type_str): 
         self._safe_ui_update(lambda: self._update_component_status_widget_internal(
             self.tele_status_frame, self.tele_status_text_label, short_text, status_type_str
         ))
@@ -875,12 +849,12 @@ class GUIManager:
             self.gpu_util_label.config(text=f"GPU Util: {util_text}")
             
             colors = self.get_current_theme_colors()
-            default_fg = colors.get("label_fg", "SystemWindowText") # Use themed label_fg
-            error_fg = colors.get("assistant_error_fg", "red") # Themed error color
-            disabled_fg = colors.get("button_disabled_fg", "silver") # Themed disabled color
-            checking_fg = "orange" # Specific color for checking status
+            default_fg = colors.get("label_fg", "SystemWindowText") 
+            error_fg = colors.get("assistant_error_fg", "red") 
+            disabled_fg = colors.get("button_disabled_fg", "silver") 
+            checking_fg = "orange" 
 
-            fg_color = default_fg # Default
+            fg_color = default_fg 
             if status_category == "ok_gpu": fg_color = default_fg
             elif status_category == "na_nvml": fg_color = disabled_fg
             elif status_category in ["error", "error_nvml_loop", "InitFail"]: fg_color = error_fg
@@ -893,37 +867,54 @@ class GUIManager:
     def _add_message_to_display_internal(self, message_with_prefix, tag_tuple, is_error=False):
         if not self.chat_history_display: return
         
-        # Determine the actual tag for error styling
-        # If it's an assistant message and an error, use the error tag.
-        # tag_tuple can be a single tag string or a tuple of tags.
-        
         tags_to_apply = list(tag_tuple) if isinstance(tag_tuple, (list, tuple)) else [tag_tuple]
         
         if is_error and ("assistant_tag" in tags_to_apply or "assistant_telegram_tag" in tags_to_apply) :
-            if "assistant_tag_error" not in tags_to_apply: # Avoid duplicate error tag
+            if "assistant_tag_error" not in tags_to_apply: 
                  tags_to_apply.append("assistant_tag_error")
-            # Remove base assistant tags if error tag is applied, to prevent color override issues
             if "assistant_tag" in tags_to_apply: tags_to_apply.remove("assistant_tag")
             if "assistant_telegram_tag" in tags_to_apply: tags_to_apply.remove("assistant_telegram_tag")
 
         self.chat_history_display.config(state=tk.NORMAL)
-        self.chat_history_display.insert(tk.END, message_with_prefix, tuple(tags_to_apply)) # Pass as tuple
+        self.chat_history_display.insert(tk.END, message_with_prefix, tuple(tags_to_apply)) 
         self.chat_history_display.see(tk.END)
         self.chat_history_display.config(state=tk.DISABLED)
 
     def add_user_message_to_display(self, text, source="gui"):
+        # text is the raw transcription or text input
         logger.info(f"Displaying User message (Source: {source}): '{text[:70]}...'")
-        prefix = "You (Telegram): " if source == "telegram" else "You: "
-        tag = "user_telegram_tag" if source == "telegram" else "user_tag"
-        self._safe_ui_update(lambda: self._add_message_to_display_internal(f"{prefix}{text}\n", (tag,)))
+        
+        prefix = "You: "
+        tag = "user_tag"
+        final_display_text = text # This is the raw text/transcription
+
+        if source == "gui":
+            # If main.py passes detected_language_code for GUI source, we could append it here
+            # For now, let's assume if it needs to be shown, it's already in 'text'
+            # by the caller (e.g. in _handle_llm_interaction for initial display of GUI input)
+            pass # Default prefix and tag are fine
+        elif source == "telegram":
+            prefix = "You (Telegram): "
+            tag = "user_telegram_tag"
+        elif source == "telegram_voice":
+            prefix = "You (Telegram Voice): "
+            tag = "user_telegram_voice_tag"
+            # final_display_text might have "(Lang: xx)" if transcription included it.
+            # If not, 'text' is just the transcription.
+            
+        self._safe_ui_update(lambda: self._add_message_to_display_internal(f"{prefix}{final_display_text}\n", (tag,)))
 
     def add_assistant_message_to_display(self, text, is_error=False, source="gui"):
         logger.info(f"Displaying Assistant message (Source: {source}, Error={is_error}): '{text[:70]}...'")
-        prefix = "Iri-shka (to Telegram): " if source == "telegram" else "Iri-shka: "
-        tag = "assistant_telegram_tag" if source == "telegram" else "assistant_tag"
+        prefix = "Iri-shka: "
+        tag = "assistant_tag"
+        
+        if source == "telegram" or source == "telegram_voice": # Assistant reply to any Telegram source
+            prefix = "Iri-shka (to Telegram): "
+            tag = "assistant_telegram_tag"
         
         text_to_add = text 
-        if not text_to_add.endswith("\n\n"): # Ensure double newline for spacing
+        if not text_to_add.endswith("\n\n"): 
             if text_to_add.endswith("\n"): text_to_add += "\n"
             else: text_to_add += "\n\n"
         
@@ -933,30 +924,52 @@ class GUIManager:
     def update_chat_display_from_list(self, chat_history_list):
         if not self.chat_history_display: return
         logger.info(f"Updating chat display from history list (length: {len(chat_history_list)}).")
-        self._configure_tags_for_chat_display() # Ensure tags are correctly configured for current theme
+        self._configure_tags_for_chat_display() 
         
         def _update():
             self.chat_history_display.config(state=tk.NORMAL)
             self.chat_history_display.delete(1.0, tk.END)
             for turn in chat_history_list:
-                user_message, assistant_message = turn.get('user', ''), turn.get('assistant', '')
-                source = turn.get('source', 'gui') # Default to 'gui' if source not in history
+                # user_message_content is the raw text or transcription from history
+                user_message_content = turn.get('user', '') 
+                assistant_message = turn.get('assistant', '')
+                source = turn.get('source', 'gui') 
 
-                user_prefix = "You (Telegram): " if source == "telegram" else "You: "
-                user_tag_to_use = "user_telegram_tag" if source == "telegram" else "user_tag"
+                user_prefix = "You: "
+                user_tag_to_use = "user_tag"
+                final_user_display_text = user_message_content # Start with raw content
                 
-                assistant_prefix = "Iri-shka (to Telegram): " if source == "telegram" else "Iri-shka: "
-                assistant_tag_to_use = "assistant_telegram_tag" if source == "telegram" else "assistant_tag"
+                if source == "gui":
+                    # If main.py stored "detected_language_code_for_gui_display" in history for GUI turns:
+                    lang_code_for_gui = turn.get("detected_language_code_for_gui_display")
+                    if lang_code_for_gui:
+                        final_user_display_text = f"{user_message_content} (Lang: {lang_code_for_gui})"
+                elif source == "telegram":
+                    user_prefix = "You (Telegram): "
+                    user_tag_to_use = "user_telegram_tag"
+                elif source == "telegram_voice":
+                    user_prefix = "You (Telegram Voice): " 
+                    user_tag_to_use = "user_telegram_voice_tag"
+                    # If language detected for Telegram voice was stored in history, could append it here:
+                    # lang_code_for_tele_voice = turn.get("detected_language_code_for_tele_voice_display")
+                    # if lang_code_for_tele_voice:
+                    #    final_user_display_text = f"{user_message_content} (Lang: {lang_code_for_tele_voice})"
 
-                if user_message: 
-                    self._add_message_to_display_internal(f"{user_prefix}{user_message}\n", (user_tag_to_use,))
+
+                assistant_prefix = "Iri-shka: "
+                assistant_tag_to_use = "assistant_tag"
+                if source == "telegram" or source == "telegram_voice":
+                    assistant_prefix = "Iri-shka (to Telegram): "
+                    assistant_tag_to_use = "assistant_telegram_tag"
+
+                if user_message_content: # Check if there's any user message
+                     self._add_message_to_display_internal(f"{user_prefix}{final_user_display_text}\n", (user_tag_to_use,))
                 
                 if assistant_message:
-                    # Basic error check based on common error prefixes/messages
                     is_error = assistant_message.startswith(("[Ollama Error:", "[LLM Error:", "[LLM Unreachable:")) or \
                                assistant_message in ("I didn't catch that, could you please repeat?", "Я не расслышала, не могли бы вы повторить?")
                     
-                    fmt_msg = assistant_message # Ensure double newline for spacing
+                    fmt_msg = assistant_message 
                     if not fmt_msg.endswith("\n\n"):
                         if fmt_msg.endswith("\n"): fmt_msg += "\n"
                         else: fmt_msg += "\n\n"
@@ -982,24 +995,22 @@ class GUIManager:
     def update_calendar_events_list(self, all_events_data):
         if not isinstance(all_events_data, list):
             logger.warning(f"Invalid data type for calendar events: {type(all_events_data)}. Expected list.")
-            self.all_calendar_events_data = [] # Reset if invalid
+            self.all_calendar_events_data = [] 
         else:
-            # Filter for valid dicts and sort
             self.all_calendar_events_data = sorted(
                 [e for e in all_events_data if isinstance(e, dict) and "date" in e], 
                 key=lambda e: (
                     datetime.strptime(e.get("date", "1900-01-01"), "%Y-%m-%d").date() 
-                        if isinstance(e.get("date"), str) else date.min, # Handle non-string dates gracefully
+                        if isinstance(e.get("date"), str) else date.min, 
                     datetime.strptime(e.get("time", "00:00"), "%H:%M").time() 
                         if e.get("time") and isinstance(e.get("time"), str) else datetime.min.time()
                 )
             )
             logger.info(f"Storing and sorting {len(self.all_calendar_events_data)} calendar events.")
         
-        # Update GUI elements
         if TKCALENDAR_AVAILABLE and self.calendar_widget:
             self._mark_dates_with_events_on_calendar(self.all_calendar_events_data)
-        self._update_filtered_event_display() # This will also run if calendar is not available but display area is
+        self._update_filtered_event_display() 
 
     def _update_kanban_column(self, display_widget, tasks_list, column_name_for_log):
         if not display_widget:
@@ -1051,7 +1062,7 @@ class GUIManager:
             self.tray_icon.stop() 
             if self.tray_thread and self.tray_thread.is_alive():
                 logger.info("Waiting for tray thread to join...")
-                self.tray_thread.join(timeout=2.0) # Increased timeout slightly
+                self.tray_thread.join(timeout=2.0) 
                 if self.tray_thread.is_alive():
                     logger.warning("Tray thread did not join cleanly.")
             self.tray_icon = None
@@ -1064,9 +1075,8 @@ class GUIManager:
                 self.app_window.destroy()
                 logger.info("Tkinter window destroyed.")
             except tk.TclError as e: 
-                # Common error if already destroyed or during interpreter shutdown
                 if "application has been destroyed" not in str(e).lower():
                     logger.warning(f"Tkinter error during destroy: {e}", exc_info=False)
-            self.app_window = None # Clear reference
+            self.app_window = None 
         else: 
             logger.info("Destroy window called, but no app_window instance.")

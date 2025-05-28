@@ -21,7 +21,7 @@ ERROR_LOG_FILE_PATH = os.path.join(LOGS_DIR_NAME, ERROR_LOG_FILENAME)
 
 # --- Main Application Logger Setup ---
 _app_logger_instance = logging.getLogger("Iri-shka_App")
-_app_logger_instance.setLevel(logging.DEBUG)  # Set to DEBUG to capture all levels from modules
+_app_logger_instance.setLevel(logging.INFO)  # Set to DEBUG to capture all levels from modules
 _app_logger_instance.propagate = False 
 
 # --- Formatter ---

@@ -54,6 +54,17 @@ except ImportError:
     logger.critical("CRITICAL: NumPy Not Found. Please install NumPy: pip install numpy. Exiting.")
     sys.exit(1)
 
+# Import whisper specifically for whisper.load_audio if WHISPER_CAPABLE
+_whisper_module_for_load_audio = None
+if whisper_handler.WHISPER_CAPABLE:
+    try:
+        import whisper
+        _whisper_module_for_load_audio = whisper
+        logger.info("Whisper module imported in main.py for load_audio utility.")
+    except ImportError:
+        logger.warning("Failed to import whisper in main.py; Telegram voice WAV loading might fail.")
+
+
 # --- Global Variables ---
 gui = None
 app_tk_instance = None
@@ -112,12 +123,16 @@ def _handle_llm_interaction(input_text, source="gui", detected_language_code=Non
         language_instruction_for_llm = config.LANGUAGE_INSTRUCTION_RUSSIAN
         assistant_error_response_text = "Произошла ошибка. Пожалуйста, попробуйте еще раз." 
     
-    user_display_text = input_text
+    user_display_text = input_text # Default
     if source == "gui" and detected_language_code: 
-        user_display_text = f"{input_text} ({detected_language_code})"
+        user_display_text = f"{input_text} (Lang: {detected_language_code})"
+    elif source == "telegram_voice": # For messages from Telegram voice
+        user_display_text = f"{input_text} (from Telegram voice)"
+    # For "telegram" (text), input_text is already fine.
     
     if gui_callbacks and 'add_user_message_to_display' in gui_callbacks:
-        gui_callbacks['add_user_message_to_display'](user_display_text, source=source)
+        # Let add_user_message_to_display handle prefix based on source
+        gui_callbacks['add_user_message_to_display'](input_text, source=source) # Pass original input_text
     
     if gui_callbacks and 'status_update' in gui_callbacks: gui_callbacks['status_update']("Thinking...")
     if gui_callbacks and 'mind_status_update' in gui_callbacks: gui_callbacks['mind_status_update']("MIND: THK", "thinking")
@@ -129,7 +144,7 @@ def _handle_llm_interaction(input_text, source="gui", detected_language_code=Non
         input_text, chat_history, user_state, assistant_state,
         language_instruction_for_llm, gui_callbacks
     )
-    current_turn_for_history = {"user": user_display_text, "source": source} 
+    current_turn_for_history = {"user": user_display_text, "source": source} # Use the formatted user_display_text for history
 
     if ollama_error:
         logger.error(f"Ollama call failed: {ollama_error}")
@@ -257,7 +272,7 @@ def _handle_llm_interaction(input_text, source="gui", detected_language_code=Non
                 status_key = "TTS unavailable" if not tts_manager.TTS_CAPABLE else "TTS not ready"
                 gui_callbacks['status_update'](f"{status_key}. Response shown.")
     
-    elif source == "telegram":
+    elif source == "telegram" or source == "telegram_voice": # Include telegram_voice here
         if telegram_bot_handler_instance and telegram_bot_handler_instance.async_loop:
             logger.info(f"Sending response to Telegram: '{assistant_response_text[:70]}...'")
             asyncio.run_coroutine_threadsafe(
@@ -354,10 +369,90 @@ def process_recorded_audio_and_interact(recorded_sample_rate):
         _handle_llm_interaction(transcribed_text, source="gui", detected_language_code=detected_language_code)
 
 
-def process_telegram_message(user_id, text_message):
-    logger.info(f"Processing Telegram message from user ID {user_id}: '{text_message[:70]}...'")
+def process_telegram_text_message(user_id, text_message): # Renamed for clarity
+    logger.info(f"Processing Telegram text message from user ID {user_id}: '{text_message[:70]}...'")
     lang_context_for_llm = assistant_state.get("last_used_language", "en")
-    _handle_llm_interaction(text_message, source="telegram", detected_language_code=lang_context_for_llm)
+    # For text messages, we don't have a detected language from Whisper upfront.
+    # LLM will infer or use assistant's last_used_language.
+    _handle_llm_interaction(text_message, source="telegram", detected_language_code=None)
+
+
+def process_telegram_voice_message(user_id, wav_filepath):
+    logger.info(f"Processing Telegram voice message from user ID {user_id}, WAV: {wav_filepath}")
+    
+    audio_numpy_array = None
+    transcribed_text = None
+    trans_err = "File load or transcription pre-check failed."
+    detected_language_code = None
+
+    if not (whisper_handler.WHISPER_CAPABLE and whisper_handler.whisper_model_ready):
+        logger.warning("Whisper module not ready or capable. Cannot transcribe Telegram voice.")
+        trans_err = "Hearing module not ready."
+    elif not _whisper_module_for_load_audio:
+        logger.error("Whisper module (for load_audio) not available in main.py. Cannot load Telegram voice WAV.")
+        trans_err = "Audio loading module missing."
+    else:
+        try:
+            if gui_callbacks and 'status_update' in gui_callbacks:
+                gui_callbacks['status_update']("Loading Telegram voice audio...")
+            audio_numpy_array = _whisper_module_for_load_audio.load_audio(wav_filepath)
+            logger.info(f"Telegram voice WAV {wav_filepath} loaded into NumPy array.")
+            
+            if gui_callbacks and 'status_update' in gui_callbacks:
+                gui_callbacks['status_update']("Transcribing Telegram voice...")
+            transcribed_text, trans_err, detected_language_code = whisper_handler.transcribe_audio(
+                audio_numpy_array, language=None, gui_callbacks=gui_callbacks
+            )
+        except Exception as e:
+            logger.error(f"Error loading or transcribing Telegram voice WAV {wav_filepath}: {e}", exc_info=True)
+            trans_err = f"Error processing voice: {e}"
+            transcribed_text = None # Ensure it's None
+
+    # Determine language for error message
+    lang_for_error_msg = assistant_state.get("last_used_language", "en")
+    if detected_language_code and detected_language_code in ["ru", "en"]: 
+        lang_for_error_msg = detected_language_code
+    
+    error_message_on_transcription_fail = "I couldn't understand your voice message. Please try again or send text."
+    if lang_for_error_msg == "ru":
+        error_message_on_transcription_fail = "Я не смогла разобрать ваше голосовое сообщение. Пожалуйста, попробуйте еще раз или отправьте текст."
+
+    if trans_err or not transcribed_text:
+        logger.warning(f"Telegram voice transcription failed or empty. Error: {trans_err}, Text: '{transcribed_text}', Lang: {detected_language_code}")
+        if gui_callbacks:
+            if 'status_update' in gui_callbacks:
+                gui_callbacks['status_update'](f"Telegram Voice Transcription: {trans_err or 'Empty.'}")
+            # Display transcription error in GUI chat as well
+            if 'add_user_message_to_display' in gui_callbacks:
+                 gui_callbacks['add_user_message_to_display']("[Unclear Telegram Voice]", source="telegram_voice")
+            if 'add_assistant_message_to_display' in gui_callbacks:
+                 gui_callbacks['add_assistant_message_to_display'](error_message_on_transcription_fail, is_error=True, source="telegram_voice")
+        
+        # Send error back to Telegram
+        if telegram_bot_handler_instance and telegram_bot_handler_instance.async_loop:
+            asyncio.run_coroutine_threadsafe(
+                telegram_bot_handler_instance.send_message_to_admin(error_message_on_transcription_fail),
+                telegram_bot_handler_instance.async_loop
+            )
+        
+        # Save to chat history
+        current_turn_for_history = {"user": "[Unclear Telegram Voice]", "assistant": error_message_on_transcription_fail, "source": "telegram_voice"}
+        chat_history.append(current_turn_for_history)
+        state_manager.save_states(chat_history, user_state, assistant_state, gui_callbacks)
+        if gui_callbacks and 'memory_status_update' in gui_callbacks:
+            gui_callbacks['memory_status_update']("MEM: SAVED", "saved")
+
+    else:
+        logger.info(f"Telegram voice transcription successful: '{transcribed_text[:70]}...' (Lang: {detected_language_code})")
+        _handle_llm_interaction(transcribed_text, source="telegram_voice", detected_language_code=detected_language_code)
+
+    # Clean up the temporary WAV file
+    if os.path.exists(wav_filepath):
+        try:
+            os.remove(wav_filepath)
+            logger.info(f"Removed temporary Telegram voice WAV: {wav_filepath}")
+        except Exception as e_rem_wav:
+            logger.warning(f"Could not remove temporary WAV file {wav_filepath}: {e_rem_wav}")
 
 
 def toggle_speaking_recording():
@@ -517,9 +612,24 @@ def check_search_engine_status():
 def _process_queued_telegram_messages():
     try:
         while not telegram_message_queue.empty():
-            user_id, text = telegram_message_queue.get_nowait() 
-            logger.info(f"Dequeued Telegram message from user {user_id} for processing in main thread.")
-            process_telegram_message(user_id, text) 
+            queued_item = telegram_message_queue.get_nowait() 
+            
+            if not isinstance(queued_item, tuple) or len(queued_item) != 3:
+                logger.error(f"Invalid item dequeued from Telegram queue: {queued_item}")
+                telegram_message_queue.task_done()
+                continue
+
+            msg_type, user_id, data = queued_item
+            
+            if msg_type == "telegram_text":
+                logger.info(f"Dequeued Telegram TEXT message from user {user_id} for processing.")
+                process_telegram_text_message(user_id, data)
+            elif msg_type == "telegram_voice_wav":
+                logger.info(f"Dequeued Telegram VOICE_WAV message from user {user_id} for processing. Path: {data}")
+                process_telegram_voice_message(user_id, data) # data is wav_filepath
+            else:
+                logger.warning(f"Unknown Telegram message type dequeued: {msg_type}")
+                
             telegram_message_queue.task_done() 
     except queue.Empty:
         pass 
@@ -602,12 +712,13 @@ def load_all_models_and_services():
         logger.warning("Whisper model not ready after loading sequence.")
         if gui_callbacks and 'status_update' in gui_callbacks: gui_callbacks['status_update']("Hearing module not ready.")
     
-    if telegram_bot_handler_instance:
+    if telegram_bot_handler_instance: 
+        # Get current status after potential start_polling and set in assistant_state
         assistant_state["telegram_bot_status"] = telegram_bot_handler_instance.get_status()
-    else:
+    else: # Set initial status in assistant_state if bot couldn't be initialized
         if not config.TELEGRAM_BOT_TOKEN: assistant_state["telegram_bot_status"] = "no_token"
         elif not config.TELEGRAM_ADMIN_USER_ID: assistant_state["telegram_bot_status"] = "no_admin"
-        else: assistant_state["telegram_bot_status"] = "off" 
+        else: assistant_state["telegram_bot_status"] = "off" # If token/admin exists but instance is None (e.g. START_BOT_ON_APP_START=False)
     
     state_manager.save_states(chat_history, user_state, assistant_state, gui_callbacks)
     logger.info("--- Sequential model and services loading/checking thread finished ---")
@@ -624,6 +735,9 @@ if __name__ == "__main__":
         if not os.path.exists(config.OUTPUT_FOLDER):
             os.makedirs(config.OUTPUT_FOLDER)
             logger.info(f"Created folder: {config.OUTPUT_FOLDER}")
+        if not os.path.exists(config.TELEGRAM_VOICE_TEMP_FOLDER): # Ensure this exists
+            os.makedirs(config.TELEGRAM_VOICE_TEMP_FOLDER)
+            logger.info(f"Created folder: {config.TELEGRAM_VOICE_TEMP_FOLDER}")
     except Exception as e_folder:
         logger.critical(f"CRITICAL: Failed to create data/output folders: {e_folder}. Exiting.", exc_info=True)
         sys.exit(1)
@@ -731,6 +845,7 @@ if __name__ == "__main__":
                 gui_callbacks=gui_callbacks 
             )
             logger.info("TelegramBotHandler initialized.")
+            # Set initial GUI status based on config.START_BOT_ON_APP_START, only if bot initialized
             if 'tele_status_update' in gui_callbacks and not config.START_BOT_ON_APP_START:
                  gui_callbacks['tele_status_update']("TELE: OFF", "off")
         except ValueError:
@@ -752,11 +867,13 @@ if __name__ == "__main__":
         if 'tele_status_update' in gui_callbacks: gui_callbacks['tele_status_update'](status_key_tele, status_type_tele)
         telegram_bot_handler_instance = None 
 
-    if telegram_bot_handler_instance: assistant_state["telegram_bot_status"] = telegram_bot_handler_instance.get_status()
-    else:
+    # Set initial assistant_state for telegram_bot_status based on actual bot status or config
+    if telegram_bot_handler_instance: 
+        assistant_state["telegram_bot_status"] = telegram_bot_handler_instance.get_status()
+    else: # If bot instance couldn't be created
         if not config.TELEGRAM_BOT_TOKEN: assistant_state["telegram_bot_status"] = "no_token"
         elif not config.TELEGRAM_ADMIN_USER_ID: assistant_state["telegram_bot_status"] = "no_admin"
-        else: assistant_state["telegram_bot_status"] = "off" 
+        else: assistant_state["telegram_bot_status"] = "off" # Token/admin ID exist but init failed for other reason or not started
 
     gui.update_chat_display_from_list(chat_history)
     logger.info("Initial chat history displayed on GUI.")

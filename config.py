@@ -9,6 +9,7 @@ load_dotenv()
 # --- File Paths ---
 DATA_FOLDER = "data"
 OUTPUT_FOLDER = "output_recordings" # Still useful if SAVE_RECORDINGS_TO_WAV is True
+TELEGRAM_VOICE_TEMP_FOLDER = f"{DATA_FOLDER}/telegram_voice_temp" # For temporary OGG/WAV files from Telegram
 CHAT_HISTORY_FILE = f"{DATA_FOLDER}/chat_history.json"
 USER_STATE_FILE = f"{DATA_FOLDER}/user_state.json"
 ASSISTANT_STATE_FILE = f"{DATA_FOLDER}/assistant_state.json"
