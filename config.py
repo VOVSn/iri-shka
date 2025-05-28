@@ -233,12 +233,12 @@ Your tasks:
     - Set `customer_state.conversation_stage` to "llm_followup_sent".
     - The `customer_state.chat_history` is already up-to-date with all messages by the system; you don't need to modify it.
 3.  Generate a `message_for_admin`. **This message MUST be in Russian.** It should be a concise, single sentence summarizing the key information for {admin_name_value}.
-    - Include the customer's identified name (e.g., "Клиент Иван..." or "Новый клиент..."). If their name was already known and is in `customer_state.name` (not "unknown"), use "Клиент {Имя}" rather than "Новый клиент {Имя}".
+    - Include the customer's identified name (e.g., "Клиент Иван..." or "Новый клиент..."). If their name was already known and is in `customer_state.name` (not "unknown"), use "Клиент {{Имя}}" rather than "Новый клиент {{Имя}}".  REMEMBER: {{Имя}} here is for the LLM to fill, not a Python format variable. The actual customer name will be derived from customer_state.name or the interaction.
     - State their primary intent.
     - Briefly mention any new calendar event you added to their state, if any.
     - Example structure: "Партнер, новый клиент {{Имя Клиента}} интересуется {{Основной Запрос}}." or "Партнер, клиент {{Имя Клиента}} просит записать на {{Описание События}}." or "Партнер, клиент {{Имя Клиента}} (ID {customer_user_id}) снова обратился по поводу {{Основной Запрос}}."
 4.  Generate `polite_followup_message_for_customer`. **This message MUST be in Russian.** It should be brief and friendly.
-    - Use a general closing like "Мы с вами скоро свяжемся." You can optionally personalize it slightly using the identified customer name and intent if it feels natural.
+    - Use a general closing like "Мы с вами скоро свяжемся." You can optionally personalize it slightly using the identified customer name (e.g. {{Имя Клиента}}) and intent if it feels natural.
     - Example: "Спасибо, {{Имя Клиента}}! Мы получили ваш запрос по поводу {{Намерение Клиента}} и скоро с вами свяжемся."
     - If no specific follow-up beyond the initial system acknowledgment is necessary or adds value, output the exact string "NO_CUSTOMER_FOLLOWUP_NEEDED" for this field.
 5.  Update your own `assistant_state`. For example, add a task to `internal_tasks.pending`: "Сообщить {admin_name_value} о контакте от {customer_user_id} ([{{Identified Customer Name}}]) по поводу [{{Identified Intent Summary}}]". Ensure this task is concise.
