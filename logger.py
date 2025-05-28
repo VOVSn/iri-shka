@@ -3,7 +3,7 @@ import logging
 import os
 from logging.handlers import RotatingFileHandler
 
-LOGS_DIR_NAME = "logs"
+LOGS_DIR_NAME = "data/logs"
 APP_LOG_FILENAME = "app.log"
 ERROR_LOG_FILENAME = "error.log"
 
