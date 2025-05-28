@@ -106,27 +106,42 @@ def _handle_admin_llm_interaction(input_text, source="gui", detected_language_co
     assistant_state_snapshot_for_prompt = {}
     with assistant_state_lock:
         assistant_state_snapshot_for_prompt = assistant_state.copy()
-    current_lang_code_for_state = "en"
+
+    current_lang_code_for_state = "en" # Default
     if detected_language_code and detected_language_code in ["ru", "en"]:
         current_lang_code_for_state = detected_language_code
     elif assistant_state_snapshot_for_prompt.get("last_used_language") in ["ru", "en"]:
         current_lang_code_for_state = assistant_state_snapshot_for_prompt.get("last_used_language")
+
     selected_bark_voice_preset = config.BARK_VOICE_PRESET_EN
     language_instruction_for_llm = config.LANGUAGE_INSTRUCTION_NON_RUSSIAN
     if current_lang_code_for_state == "ru":
         selected_bark_voice_preset = config.BARK_VOICE_PRESET_RU
         language_instruction_for_llm = config.LANGUAGE_INSTRUCTION_RUSSIAN
+
+    # Display user message on GUI immediately
     if gui_callbacks and callable(gui_callbacks.get('add_user_message_to_display')):
-        gui_callbacks['add_user_message_to_display'](input_text, source=source)
+        # For GUI source, detected_language_code might be added to input_text by whisper_handler for display
+        # For TG source, this is just the raw text.
+        display_text = input_text
+        if source == "gui" and detected_language_code: # Only for GUI direct input with lang detection
+            # This logic might be better handled in add_user_message_to_display itself if we want (Lang:xx) for GUI
+            pass # Input_text already contains it if from Whisper with language
+        gui_callbacks['add_user_message_to_display'](display_text, source=source)
+
+
     if gui_callbacks and callable(gui_callbacks.get('status_update')):
         gui_callbacks['status_update']("Thinking (Admin)...")
     if gui_callbacks and callable(gui_callbacks.get('mind_status_update')):
         gui_callbacks['mind_status_update']("MIND: THK", "thinking")
+
     target_customer_id_for_prompt = None
     customer_state_for_prompt_str = "{}"
     is_customer_context_active_for_prompt = False
+
+    # Scan recent chat history for customer context (from assistant's system reports)
     history_to_scan_for_customer_context = []
-    with assistant_state_lock: # Use the global chat_history for scanning
+    with assistant_state_lock: # Access global chat_history under lock
         scan_length = config.MAX_HISTORY_TURNS // 2
         if scan_length < 1: scan_length = 1
         start_index = max(0, len(chat_history) - scan_length)
@@ -134,17 +149,18 @@ def _handle_admin_llm_interaction(input_text, source="gui", detected_language_co
 
     for turn in reversed(history_to_scan_for_customer_context):
         assistant_message = turn.get("assistant", "")
-        turn_source = turn.get("source", "")
-        if turn_source == "customer_summary_internal": # This is how we mark summaries from customers
+        turn_source = turn.get("source", "") # Check the source of the turn
+        if turn_source == "customer_summary_internal": # This identifies a system report about a customer
             match_summary = re.search(r"\[Сводка по клиенту (\d+)\]", assistant_message)
             if match_summary:
                 try:
                     target_customer_id_for_prompt = int(match_summary.group(1))
-                    logger.info(f"ADMIN_LLM_FLOW: {function_signature_for_log} - Found customer context ID {target_customer_id_for_prompt} from source 'customer_summary_internal'.")
+                    logger.info(f"ADMIN_LLM_FLOW: {function_signature_for_log} - Found customer context ID {target_customer_id_for_prompt} from 'customer_summary_internal'.")
                     break
                 except ValueError:
                     logger.warning(f"ADMIN_LLM_FLOW: {function_signature_for_log} - Found non-integer customer ID in summary: {match_summary.group(1)}")
-                    target_customer_id_for_prompt = None
+                    target_customer_id_for_prompt = None # Reset if invalid
+
     if target_customer_id_for_prompt:
         try:
             loaded_customer_state = state_manager.load_or_initialize_customer_state(target_customer_id_for_prompt, gui_callbacks)
@@ -159,125 +175,159 @@ def _handle_admin_llm_interaction(input_text, source="gui", detected_language_co
             logger.error(f"ADMIN_LLM_FLOW: {function_signature_for_log} - Exception loading state for context customer {target_customer_id_for_prompt}: {e_load_ctx_cust}", exc_info=True)
             target_customer_id_for_prompt = None; customer_state_for_prompt_str = "{}"; is_customer_context_active_for_prompt = False
     else:
-        logger.debug(f"ADMIN_LLM_FLOW: {function_signature_for_log} - No active customer context identified.")
+        logger.debug(f"ADMIN_LLM_FLOW: {function_signature_for_log} - No active customer context identified from chat history.")
+
     assistant_state_for_this_prompt = assistant_state_snapshot_for_prompt.copy()
-    assistant_state_for_this_prompt["last_used_language"] = current_lang_code_for_state
-    admin_current_name = assistant_state_for_this_prompt.get("admin_name", "Partner")
+    assistant_state_for_this_prompt["last_used_language"] = current_lang_code_for_state # Ensure LLM knows current language context
+    admin_current_name = assistant_state_for_this_prompt.get("admin_name", "Partner") # Get current name from assistant's perspective
+
     format_kwargs_for_ollama = {
-        "admin_name_value": admin_current_name,
-        "assistant_admin_name_current_value": admin_current_name,
+        "admin_name_value": admin_current_name, # Name LLM should use for admin in its response
+        "assistant_admin_name_current_value": admin_current_name, # Admin's name as currently stored in assistant state
         "is_customer_context_active": is_customer_context_active_for_prompt,
         "active_customer_id": str(target_customer_id_for_prompt) if target_customer_id_for_prompt else "N/A",
         "active_customer_state_string": customer_state_for_prompt_str
     }
     expected_keys_for_response = ["answer_to_user", "updated_user_state", "updated_assistant_state", "updated_active_customer_state"]
-    logger.debug(f"ADMIN_LLM_FLOW: {function_signature_for_log} - Calling Ollama. CustContext: {is_customer_context_active_for_prompt}, CustID: {target_customer_id_for_prompt}")
+
+    logger.debug(f"ADMIN_LLM_FLOW: {function_signature_for_log} - Calling Ollama. CustContext Active: {is_customer_context_active_for_prompt}, CustID: {target_customer_id_for_prompt}")
     ollama_data, ollama_error = ollama_handler.call_ollama_for_chat_response(
         prompt_template_to_use=config.OLLAMA_PROMPT_TEMPLATE,
-        transcribed_text=input_text, current_chat_history=chat_history, current_user_state=user_state,
-        current_assistant_state=assistant_state_for_this_prompt, language_instruction=language_instruction_for_llm,
-        format_kwargs=format_kwargs_for_ollama, expected_keys_override=expected_keys_for_response
+        transcribed_text=input_text, # This is the admin's direct input
+        current_chat_history=chat_history, # Pass the global admin chat history
+        current_user_state=user_state, # Pass the global admin user state
+        current_assistant_state=assistant_state_for_this_prompt, # Pass the potentially modified assistant state for this call
+        language_instruction=language_instruction_for_llm,
+        format_kwargs=format_kwargs_for_ollama,
+        expected_keys_override=expected_keys_for_response
     )
+
+    # Prepare current turn for history (user part)
     current_turn_for_history = {"user": input_text, "source": source, "timestamp": state_manager.get_current_timestamp_iso()}
     if source == "gui" and detected_language_code:
         current_turn_for_history["detected_language_code_for_gui_display"] = detected_language_code
-    elif source == "telegram_voice_admin" and detected_language_code: # Changed from telegram_voice
+    elif source == "telegram_voice_admin" and detected_language_code: # Match source from process_admin_telegram_voice_message
          current_turn_for_history["detected_language_code_for_tele_voice_display"] = detected_language_code
+
+
     if ollama_error:
         logger.error(f"ADMIN_LLM_FLOW: {function_signature_for_log} - Ollama call failed: {ollama_error}")
         ollama_ready = False
         short_code, status_type = _parse_ollama_error_to_short_code(ollama_error)
         if gui_callbacks and callable(gui_callbacks.get('mind_status_update')): gui_callbacks['mind_status_update'](f"MIND: {short_code}", status_type)
         if gui_callbacks and callable(gui_callbacks.get('status_update')): gui_callbacks['status_update'](f"LLM Error (Admin): {ollama_error[:50]}")
+
         assistant_response_text = "An internal error occurred while processing your request (admin)."
         if current_lang_code_for_state == "ru": assistant_response_text = "При обработке вашего запроса (админ) произошла внутренняя ошибка."
-        current_turn_for_history["assistant"] = f"[LLM Error: {assistant_response_text}]"
+
+        current_turn_for_history["assistant"] = f"[LLM Error: {assistant_response_text}]" # Add error to history
         if gui_callbacks and callable(gui_callbacks.get('add_assistant_message_to_display')):
-            gui_callbacks['add_assistant_message_to_display'](assistant_response_text, is_error=True, source=source)
+            gui_callbacks['add_assistant_message_to_display'](assistant_response_text, is_error=True, source=source) # Display error on GUI
     else:
         logger.info(f"ADMIN_LLM_FLOW: {function_signature_for_log} - Ollama call successful.")
         ollama_ready = True
         if gui_callbacks and callable(gui_callbacks.get('mind_status_update')): gui_callbacks['mind_status_update']("MIND: RDY", "ready")
+
         assistant_response_text = ollama_data.get("answer_to_user", "Error: LLM did not provide an answer.")
         new_admin_user_state_from_llm = ollama_data.get("updated_user_state", {})
         new_assistant_state_changes_from_llm = ollama_data.get("updated_assistant_state", {})
         updated_customer_state_from_llm = ollama_data.get("updated_active_customer_state")
+
+        # --- Apply Admin User State Changes (Theme, Font Size) ---
         current_gui_theme_from_llm = new_admin_user_state_from_llm.get("gui_theme", current_gui_theme)
         if current_gui_theme_from_llm != current_gui_theme and current_gui_theme_from_llm in [config.GUI_THEME_LIGHT, config.GUI_THEME_DARK]:
             if gui and callable(gui_callbacks.get('apply_application_theme')):
                 gui_callbacks['apply_application_theme'](current_gui_theme_from_llm)
-                current_gui_theme = current_gui_theme_from_llm
-        new_admin_user_state_from_llm["gui_theme"] = current_gui_theme
+                current_gui_theme = current_gui_theme_from_llm # Update global tracker
+        new_admin_user_state_from_llm["gui_theme"] = current_gui_theme # Ensure state reflects applied theme
+
         current_font_size_from_llm = new_admin_user_state_from_llm.get("chat_font_size", current_chat_font_size_applied)
         try: current_font_size_from_llm = int(current_font_size_from_llm)
         except (ValueError, TypeError): current_font_size_from_llm = current_chat_font_size_applied
         clamped_font_size = max(config.MIN_CHAT_FONT_SIZE, min(current_font_size_from_llm, config.MAX_CHAT_FONT_SIZE))
-        if clamped_font_size != current_font_size_from_llm : current_font_size_from_llm = clamped_font_size
+        if clamped_font_size != current_font_size_from_llm : current_font_size_from_llm = clamped_font_size # Update if clamped
         if current_font_size_from_llm != current_chat_font_size_applied:
             if gui and callable(gui_callbacks.get('apply_chat_font_size')):
                 gui_callbacks['apply_chat_font_size'](current_font_size_from_llm)
-                current_chat_font_size_applied = current_font_size_from_llm
-        new_admin_user_state_from_llm["chat_font_size"] = current_chat_font_size_applied
+                current_chat_font_size_applied = current_font_size_from_llm # Update global tracker
+        new_admin_user_state_from_llm["chat_font_size"] = current_chat_font_size_applied # Ensure state reflects applied font
+
+        # Update global user_state (admin's state)
         user_state.clear(); user_state.update(new_admin_user_state_from_llm)
+
+        # --- Apply Assistant State Changes ---
         with assistant_state_lock:
+            # Load current global assistant state to merge changes carefully
             current_global_assistant_state = state_manager.load_assistant_state_only(gui_callbacks)
             for key, value_from_llm in new_assistant_state_changes_from_llm.items():
                 if key == "internal_tasks" and isinstance(value_from_llm, dict) and isinstance(current_global_assistant_state.get(key), dict):
                     for task_type in ["pending", "in_process", "completed"]:
                         new_tasks = value_from_llm.get(task_type, [])
-                        if not isinstance(new_tasks, list): new_tasks = [str(new_tasks)]
+                        if not isinstance(new_tasks, list): new_tasks = [str(new_tasks)] # Ensure list of strings
                         existing_tasks = current_global_assistant_state[key].get(task_type, [])
-                        if not isinstance(existing_tasks, list): existing_tasks = [str(existing_tasks)]
-                        # Use dict.fromkeys to merge and keep order of first seen unique tasks
-                        combined_tasks_str = list(dict.fromkeys([str(t) for t in existing_tasks] + [str(t) for t in new_tasks]))
-                        current_global_assistant_state[key][task_type] = combined_tasks_str
-                else: current_global_assistant_state[key] = value_from_llm
-            current_global_assistant_state["last_used_language"] = current_lang_code_for_state
+                        if not isinstance(existing_tasks, list): existing_tasks = [str(existing_tasks)] # Ensure list of strings
+                        # Merge tasks, avoiding duplicates, keeping order
+                        current_global_assistant_state[key][task_type] = list(dict.fromkeys([str(t) for t in existing_tasks] + [str(t) for t in new_tasks]))
+                else:
+                    current_global_assistant_state[key] = value_from_llm
+            current_global_assistant_state["last_used_language"] = current_lang_code_for_state # Persist language used
             assistant_state.clear()
             assistant_state.update(current_global_assistant_state)
-            state_manager.save_assistant_state_only(assistant_state, gui_callbacks)
-            logger.debug(f"ADMIN_LLM_FLOW: {function_signature_for_log} - Global assistant_state updated.")
+            state_manager.save_assistant_state_only(assistant_state, gui_callbacks) # Save updated global assistant state
+            logger.debug(f"ADMIN_LLM_FLOW: {function_signature_for_log} - Global assistant_state updated and saved.")
+
+        # --- Update GUI based on new states ---
         if gui_callbacks:
             if callable(gui_callbacks.get('update_todo_list')): gui_callbacks['update_todo_list'](user_state.get("todos", []))
-            if callable(gui_callbacks.get('update_calendar_events_list')): gui_callbacks['update_calendar_events_list'](user_state.get("calendar_events", []))
+            if callable(gui_callbacks.get('update_calendar_events_list')):
+                logger.debug(f"ADMIN_LLM_FLOW: Updating GUI admin calendar with: {user_state.get('calendar_events', [])}")
+                gui_callbacks['update_calendar_events_list'](user_state.get("calendar_events", []))
+
             asst_tasks = assistant_state.get("internal_tasks", {});
-            if not isinstance(asst_tasks, dict): asst_tasks = {}
+            if not isinstance(asst_tasks, dict): asst_tasks = {} # Ensure it's a dict
             if callable(gui_callbacks.get('update_kanban_pending')): gui_callbacks['update_kanban_pending'](asst_tasks.get("pending", []))
             if callable(gui_callbacks.get('update_kanban_in_process')): gui_callbacks['update_kanban_in_process'](asst_tasks.get("in_process", []))
             if callable(gui_callbacks.get('update_kanban_completed')): gui_callbacks['update_kanban_completed'](asst_tasks.get("completed", []))
+
+        # --- Handle Customer State Update (if LLM provided one) ---
         if updated_customer_state_from_llm and isinstance(updated_customer_state_from_llm, dict) and target_customer_id_for_prompt:
             if updated_customer_state_from_llm.get("user_id") == target_customer_id_for_prompt:
                 if state_manager.save_customer_state(target_customer_id_for_prompt, updated_customer_state_from_llm, gui_callbacks):
                     logger.info(f"ADMIN_LLM_FLOW: {function_signature_for_log} - Updated state for context customer {target_customer_id_for_prompt}.")
-                    # If admin modified customer's calendar, this doesn't auto-update admin's calendar directly through this path
-                    # It might be updated if the LLM also put an event in admin's `updated_user_state.calendar_events`.
-                    # If a cross-update is always needed, LLM must be prompted to do both, or app logic added here.
-                    # For now, relying on LLM.
-            else: logger.warning(f"ADMIN_LLM_FLOW: {function_signature_for_log} - LLM returned updated_active_customer_state for mismatched ID. Not saving.")
-        elif updated_customer_state_from_llm is not None and updated_customer_state_from_llm != {}: # Check for non-null and non-empty-dict
-             logger.warning(f"ADMIN_LLM_FLOW: {function_signature_for_log} - 'updated_active_customer_state' from LLM was not null/empty but invalid or unexpected. Value: {updated_customer_state_from_llm}")
+                    # If the customer's calendar was updated AND this might affect the admin's view (e.g., admin is an attendee),
+                    # the LLM should have ALSO updated admin's calendar in `updated_user_state`.
+                    # The admin GUI calendar update above (`gui_callbacks['update_calendar_events_list'](user_state.get("calendar_events", []))`)
+                    # will reflect any changes to the admin's own calendar.
+            else:
+                logger.warning(f"ADMIN_LLM_FLOW: {function_signature_for_log} - LLM returned updated_active_customer_state for mismatched ID (Expected {target_customer_id_for_prompt}, Got {updated_customer_state_from_llm.get('user_id')}). Not saving customer state.")
+        elif updated_customer_state_from_llm is not None and updated_customer_state_from_llm != {}: # Check for non-null and non-empty dict
+             logger.warning(f"ADMIN_LLM_FLOW: {function_signature_for_log} - 'updated_active_customer_state' from LLM was not null/empty but invalid or no target_customer_id_for_prompt. Value: {updated_customer_state_from_llm}")
 
-        current_turn_for_history["assistant"] = assistant_response_text
-        if (source == "telegram_admin" or source == "telegram_voice_admin") and gui_callbacks and callable(gui_callbacks.get('add_assistant_message_to_display')):
-            gui_callbacks['add_assistant_message_to_display'](assistant_response_text, source=source) # Display on GUI even if from TG
+        current_turn_for_history["assistant"] = assistant_response_text # Add assistant's response to current turn
+
+        # Display assistant message on GUI (if not already handled for TG source)
+        if source == "gui" and gui_callbacks and callable(gui_callbacks.get('add_assistant_message_to_display')):
+             gui_callbacks['add_assistant_message_to_display'](assistant_response_text, source=source)
+        elif (source == "telegram_admin" or source == "telegram_voice_admin") and gui_callbacks and callable(gui_callbacks.get('add_assistant_message_to_display')):
+            # Also display on GUI what was sent to Admin TG
+            gui_callbacks['add_assistant_message_to_display'](assistant_response_text, source=source) # source identifies it as "to Telegram"
             if callable(gui_callbacks.get('status_update')):
                 gui_callbacks['status_update'](f"Iri-shka (to Admin TG): {assistant_response_text[:40]}...")
-        else: # For GUI source, already handled user message display. Now add assistant's.
-            if gui_callbacks and callable(gui_callbacks.get('add_assistant_message_to_display')):
-                gui_callbacks['add_assistant_message_to_display'](assistant_response_text, source=source)
 
+
+    # --- Save all states and update chat history display ---
     with assistant_state_lock:
         chat_history.append(current_turn_for_history)
-        chat_history = state_manager.save_states(chat_history, user_state, assistant_state.copy(), gui_callbacks) # Save all states
+        chat_history = state_manager.save_states(chat_history, user_state, assistant_state.copy(), gui_callbacks) # Save all global states
     if gui_callbacks and callable(gui_callbacks.get('memory_status_update')):
-        gui_callbacks['memory_status_update']("MEM: SAVED", "saved")
-    if gui and callable(gui_callbacks.get('update_chat_display_from_list')): # Update GUI chat display after save
+        gui_callbacks['memory_status_update']("MEM: SAVED", "saved") # Use 'saved' not 'ready'
+    if gui and callable(gui_callbacks.get('update_chat_display_from_list')): # Update GUI chat display
         gui_callbacks['update_chat_display_from_list'](chat_history)
 
-    # Speak or send to Telegram
+    # --- Speak response or send to Telegram ---
     if source == "gui":
         if tts_manager.is_tts_ready():
-            def _deferred_gui_display_on_playback_admin():
+            def _deferred_gui_display_on_playback_admin(): # Callback for when TTS actually starts
                 if gui_callbacks and callable(gui_callbacks.get('status_update')):
                     gui_callbacks['status_update'](f"Speaking (Admin): {assistant_response_text[:40]}...")
             current_persona_name = "Iri-shka"
@@ -296,12 +346,13 @@ def _handle_admin_llm_interaction(input_text, source="gui", detected_language_co
                     text_send_future = asyncio.run_coroutine_threadsafe(
                         telegram_bot_handler_instance.send_text_message_to_user(admin_id_int, assistant_response_text),
                         telegram_bot_handler_instance.async_loop)
-                    text_send_future.result(timeout=15)
+                    text_send_future.result(timeout=15) # Wait for completion
                     logger.info(f"ADMIN_LLM_FLOW: Text reply sent to admin TG.")
                 else: logger.info(f"ADMIN_LLM_FLOW: Text reply to admin disabled by config.")
+
                 if config.TELEGRAM_REPLY_WITH_VOICE:
                     logger.info(f"ADMIN_LLM_FLOW: Sending VOICE reply to admin. Lang: {current_lang_code_for_state}, Preset: {selected_bark_voice_preset}")
-                    _send_voice_reply_to_telegram_user(admin_id_int, assistant_response_text, selected_bark_voice_preset)
+                    _send_voice_reply_to_telegram_user(admin_id_int, assistant_response_text, selected_bark_voice_preset) # This is synchronous in its TTS part
                     logger.info(f"ADMIN_LLM_FLOW: Voice reply process for admin TG completed.")
                 else: logger.info(f"ADMIN_LLM_FLOW: Voice reply to admin disabled by config.")
             except asyncio.TimeoutError as te_async:
@@ -315,15 +366,97 @@ def _handle_admin_llm_interaction(input_text, source="gui", detected_language_co
             if not config.TELEGRAM_ADMIN_USER_ID: missing_parts.append("AdminID")
             logger.warning(f"ADMIN_LLM_FLOW: Cannot send reply to Admin TG. Missing: {', '.join(missing_parts)}. Source: {source}")
 
-    # Final GUI state update
+    # Final GUI state update for speak button and status label
     if gui_callbacks:
         enable_speak_btn = whisper_handler.is_whisper_ready()
         if callable(gui_callbacks.get('speak_button_update')):
             gui_callbacks['speak_button_update'](enable_speak_btn, "Speak" if enable_speak_btn else "HEAR NRDY")
+        # Only update status to "Ready" if TTS is not currently speaking (or about to speak)
         is_speaking_gui = tts_manager.current_tts_thread and tts_manager.current_tts_thread.is_alive()
         if callable(gui_callbacks.get('status_update')) and not is_speaking_gui:
              gui_callbacks['status_update']("Ready (Admin)." if enable_speak_btn else "Hearing N/A (Admin).")
     logger.info(f"ADMIN_LLM_FLOW: {function_signature_for_log} - Finished.")
+
+
+def _send_voice_reply_to_telegram_user(target_user_id: int, text_to_speak: str, bark_voice_preset: str):
+    if not (telegram_bot_handler_instance and telegram_bot_handler_instance.async_loop and
+            tts_manager.is_tts_ready() and PydubAudioSegment and nltk and np and sf):
+        missing = []
+        if not tts_manager.is_tts_ready(): missing.append("TTS")
+        if not PydubAudioSegment: missing.append("Pydub") # Pydub is needed for OGG conversion
+        if not nltk: missing.append("NLTK")
+        logger.warning(f"Cannot send voice reply to {target_user_id}: Missing deps ({', '.join(missing)}). Text: '{text_to_speak[:30]}'")
+        return
+    logger.info(f"Synthesizing voice for user {target_user_id} (Preset: {bark_voice_preset}): '{text_to_speak[:50]}...'")
+    ts_suffix = datetime.datetime.now().strftime('%Y%m%d%H%M%S%f')
+    temp_tts_merged_wav_path = os.path.join(config.TELEGRAM_TTS_TEMP_FOLDER, f"tts_u{target_user_id}_merged_{ts_suffix}.wav")
+    temp_tts_ogg_path = os.path.join(config.TELEGRAM_TTS_TEMP_FOLDER, f"tts_u{target_user_id}_reply_{ts_suffix}.ogg")
+    
+    bark_tts_engine = tts_manager.get_bark_model_instance()
+    if not bark_tts_engine:
+        logger.error(f"Could not get Bark instance for user {target_user_id}. Skipping voice.")
+        return
+
+    lang_for_nltk = 'english' if 'en_' in bark_voice_preset.lower() else 'russian'
+    try: nltk.data.find(f'tokenizers/punkt/PY3/{lang_for_nltk}.pickle')
+    except LookupError:
+        try: nltk.download('punkt', quiet=True)
+        except Exception as e_nltk_dl: logger.error(f"Failed to download NLTK 'punkt' for {lang_for_nltk}: {e_nltk_dl}. TTS quality might be affected.")
+    
+    try: sentences = nltk.sent_tokenize(text_to_speak, language=lang_for_nltk)
+    except Exception as e_nltk_sent: sentences = [text_to_speak]; logger.warning(f"NLTK sentence tokenization failed: {e_nltk_sent}. Using full text as one chunk.")
+    
+    text_chunks = []; current_batch = []
+    for i, s in enumerate(sentences):
+        current_batch.append(s)
+        if len(current_batch) >= config.BARK_MAX_SENTENCES_PER_CHUNK or (i + 1) == len(sentences):
+            text_chunks.append(" ".join(current_batch)); current_batch = []
+    
+    all_audio_pieces = []; target_sr = None; first_valid_chunk = False
+    for idx, chunk_text in enumerate(text_chunks):
+        audio_arr, sr = bark_tts_engine.synthesize_speech_to_array(
+            chunk_text, generation_params={"voice_preset": bark_voice_preset}
+        )
+        if audio_arr is not None and sr is not None:
+            if target_sr is None: target_sr = sr
+            if sr != target_sr: logger.warning(f"Samplerate mismatch in TTS chunks (expected {target_sr}, got {sr}). Skipping chunk."); continue
+            if first_valid_chunk and config.BARK_SILENCE_DURATION_MS > 0:
+                silence = np.zeros(int(config.BARK_SILENCE_DURATION_MS / 1000 * target_sr), dtype=audio_arr.dtype)
+                all_audio_pieces.append(silence)
+            all_audio_pieces.append(audio_arr); first_valid_chunk = True
+        else: logger.warning(f"TTS synthesize_speech_to_array failed for chunk {idx} for user {target_user_id}")
+    
+    if all_audio_pieces and target_sr is not None:
+        merged_audio = np.concatenate(all_audio_pieces)
+        try:
+            sf.write(temp_tts_merged_wav_path, merged_audio, target_sr) # type: ignore
+            pydub_seg = PydubAudioSegment.from_wav(temp_tts_merged_wav_path) # type: ignore
+            pydub_seg = pydub_seg.set_frame_rate(16000).set_channels(1) # Ensure 16kHz mono for Opus
+            pydub_seg.export(temp_tts_ogg_path, format="ogg", codec="libopus", bitrate="24k") # Opus is good for voice
+            
+            send_future = None
+            # Use the generic send_voice_message_to_user from TelegramBotHandler
+            if hasattr(telegram_bot_handler_instance, 'send_voice_message_to_user'):
+                send_future = asyncio.run_coroutine_threadsafe(
+                    telegram_bot_handler_instance.send_voice_message_to_user(target_user_id, temp_tts_ogg_path), # type: ignore
+                    telegram_bot_handler_instance.async_loop) # type: ignore
+            else:
+                logger.error(f"TelegramBotHandler is missing 'send_voice_message_to_user' method. Cannot send voice to user {target_user_id}.")
+
+            if send_future:
+                send_future.result(timeout=20) # Wait for the send operation
+                logger.info(f"Voice reply sent to user {target_user_id} using {temp_tts_ogg_path}")
+        except Exception as e_send_v: logger.error(f"Error processing/sending voice to {target_user_id}: {e_send_v}", exc_info=True)
+    else: logger.error(f"No audio pieces synthesized for user {target_user_id}. Cannot send voice.")
+    
+    # Cleanup temporary files
+    if os.path.exists(temp_tts_merged_wav_path):
+        try: os.remove(temp_tts_merged_wav_path)
+        except OSError as e: logger.warning(f"Could not remove temp WAV {temp_tts_merged_wav_path}: {e}") # nosec B110
+    if os.path.exists(temp_tts_ogg_path):
+        try: os.remove(temp_tts_ogg_path)
+        except OSError as e: logger.warning(f"Could not remove temp OGG {temp_tts_ogg_path}: {e}") # nosec B110
+
 
 def _send_voice_reply_to_telegram_user(target_user_id: int, text_to_speak: str, bark_voice_preset: str):
     if not (telegram_bot_handler_instance and telegram_bot_handler_instance.async_loop and

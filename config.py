@@ -18,8 +18,8 @@ ASSISTANT_STATE_FILE = f"{DATA_FOLDER}/assistant_state.json"
 
 # --- Ollama ---
 OLLAMA_API_URL = os.getenv("OLLAMA_API_URL", "http://localhost:11434/api/generate")
-OLLAMA_MODEL_NAME = "phi4" # Using a slightly smaller model for potentially faster customer responses
-OLLAMA_REQUEST_TIMEOUT = 180 # Timeout for the LLM call itself
+OLLAMA_MODEL_NAME = "phi4"
+OLLAMA_REQUEST_TIMEOUT = 180
 OLLAMA_PING_TIMEOUT = 15
 OLLAMA_PING_PROMPT = "You are an AI assistant. Respond with a single word: 'ready'."
 
@@ -31,17 +31,24 @@ SEARCH_ENGINE_PING_TIMEOUT = 10
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_ADMIN_USER_ID = os.getenv("TELEGRAM_ADMIN_USER_ID", "")
 TELEGRAM_POLLING_TIMEOUT = 20
-TELEGRAM_START_MESSAGE = "Hi there! I'm Iri-shka, your friendly AI assistant, connected via Telegram. How can I help you today?" # For admin
+TELEGRAM_START_MESSAGE = "Hi there! I'm Iri-shka, your friendly AI assistant, connected via Telegram. How can I help you today?"
 START_BOT_ON_APP_START = True
 TELEGRAM_REPLY_WITH_TEXT = os.getenv("TELEGRAM_REPLY_WITH_TEXT", "True").lower() == "true"
-TELEGRAM_REPLY_WITH_VOICE = os.getenv("TELEGRAM_REPLY_WITH_VOICE", "True").lower() == "true" # For admin replies
+TELEGRAM_REPLY_WITH_VOICE = os.getenv("TELEGRAM_REPLY_WITH_VOICE", "True").lower() == "true"
 
 # Messages for Non-Admin (Customer) Interactions
 TELEGRAM_NON_ADMIN_GREETING = "Добрый день! Пожалуйста, назовите свое имя и опишите ваш вопрос или что бы вы хотели."
-TELEGRAM_NON_ADMIN_THANKS_AND_FORWARDED = "Спасибо! Ваше обращение принято и будет передано администратору. Мы свяжемся с вами при необходимости." # Generic ack, sent immediately
+TELEGRAM_NON_ADMIN_THANKS_AND_FORWARDED = "Спасибо! Ваше обращение принято и будет передано администратору. Мы свяжемся с вами при необходимости."
 TELEGRAM_NON_ADMIN_ALREADY_FORWARDED = "Ваше предыдущее обращение уже обрабатывается. Пожалуйста, ожидайте ответа от администратора."
-TELEGRAM_NON_ADMIN_PROCESSING_ERROR_TO_ADMIN_PREFIX = "Admin Alert: Failed to process LLM summary for customer " # Appended with User ID and details
-TELEGRAM_NON_ADMIN_MESSAGE_AGGREGATION_DELAY_SECONDS = 30 # Time to wait for more messages from customer
+TELEGRAM_NON_ADMIN_PROCESSING_ERROR_TO_ADMIN_PREFIX = "Admin Alert: Failed to process LLM summary for customer "
+TELEGRAM_NON_ADMIN_MESSAGE_AGGREGATION_DELAY_SECONDS = 30
+
+TELEGRAM_RETURNING_CUSTOMER_GREETING_KNOWN_NAME = "Добрый день, {customer_name}! Рады снова видеть."
+TELEGRAM_RETURNING_CUSTOMER_GREETING_STILL_UNKNOWN_NAME = "Добрый день! Вы обращались к нам ранее. Если несложно, напомните, пожалуйста, ваше имя."
+TELEGRAM_RETURNING_CUSTOMER_QUESTION_PROMPT = "Чем могу помочь сегодня? Если у вас есть новые вопросы или вы хотите уточнить что-то по предыдущим обращениям, пожалуйста, напишите."
+TELEGRAM_CUSTOMER_CALENDAR_SUMMARY_HEADER = "Напоминаю о ваших предстоящих записях:"
+TELEGRAM_CUSTOMER_NO_CALENDAR_EVENTS = "У вас пока нет запланированных записей в нашей системе."
+TELEGRAM_CUSTOMER_SUMMARY_FOOTER_QUESTION = "Есть ли у вас вопросы по этой информации или что-то еще, с чем я могу помочь?"
 
 # --- Audio (Primarily for Admin Interaction & TTS) ---
 CHUNK = 1024
@@ -49,7 +56,7 @@ FORMAT = pyaudio.paInt16
 CHANNELS = 1
 INPUT_RATE = 16000
 ALTERNATIVE_RATE = 44100
-SAVE_RECORDINGS_TO_WAV = False # For admin's recordings
+SAVE_RECORDINGS_TO_WAV = False
 
 # --- Whisper (For Admin Voice Input) ---
 WHISPER_MODEL_SIZE = "medium"
@@ -58,14 +65,14 @@ WHISPER_MODEL_SIZE = "medium"
 BARK_MODEL_NAME = "suno/bark-small"
 BARK_VOICE_PRESET_RU = "v2/ru_speaker_6"
 BARK_VOICE_PRESET_EN = "v2/en_speaker_9"
-BARK_MAX_SENTENCES_PER_CHUNK = 2 # For TTS to Telegram
-BARK_SILENCE_DURATION_MS = 300 # For TTS to Telegram
+BARK_MAX_SENTENCES_PER_CHUNK = 2
+BARK_SILENCE_DURATION_MS = 300
 BARK_DO_SAMPLE = True
 BARK_FINE_TEMPERATURE = 0.5
 BARK_COARSE_TEMPERATURE = 0.7
 
 # --- Chat & State ---
-MAX_HISTORY_TURNS = 10 # For admin chat history log
+MAX_HISTORY_TURNS = 10
 TIMEZONE_OFFSET_HOURS = 3
 
 # --- GUI Themes & Font ---
@@ -76,12 +83,12 @@ MIN_CHAT_FONT_SIZE = 10
 MAX_CHAT_FONT_SIZE = 18
 
 # --- Threading ---
-LLM_TASK_THREAD_POOL_SIZE = int(os.getenv("LLM_TASK_THREAD_POOL_SIZE", "3")) # For concurrent LLM calls (customers, tools)
-CUSTOMER_INTERACTION_CHECK_INTERVAL_SECONDS = 5 # How often to check for expired customer aggregation timers
+LLM_TASK_THREAD_POOL_SIZE = int(os.getenv("LLM_TASK_THREAD_POOL_SIZE", "3"))
+CUSTOMER_INTERACTION_CHECK_INTERVAL_SECONDS = 5
 
 # --- Default State Blueprints ---
-DEFAULT_USER_STATE = { # This is for the Admin User
-    "name": "Admin", # Default if Iri-shka hasn't been told a name
+DEFAULT_USER_STATE = {
+    "name": "Admin",
     "current_topic": "",
     "topics_discussed": [],
     "user_sentiment_summary": "positive",
@@ -94,25 +101,25 @@ DEFAULT_USER_STATE = { # This is for the Admin User
 }
 
 DEFAULT_NON_ADMIN_USER_STATE = {
-    "user_id": None, # Telegram User ID (int)
-    "type_of_user": "customer", # (string)
-    "name": "unknown", # (string) - LLM will try to fill this
-    "intent": "unknown", # (string) - LLM will try to fill this
-    "chat_history": [], # List of dicts: {"sender": "bot" or "customer", "message": "text", "timestamp": "iso_string"}
-    "calendar_events": [], # Customer-specific events proposed/agreed with them
-    "conversation_stage": "new", # (string) Stages: "new", "awaiting_initial_reply", "aggregating_messages", "acknowledged_pending_llm", "llm_followup_sent", "error_forwarded_to_admin", "interaction_closed"
-    "last_message_timestamp": "", # ISO string, for aggregation timer. Empty string is fine for JSON.
+    "user_id": None,
+    "type_of_user": "customer",
+    "name": "unknown",
+    "intent": "unknown",
+    "chat_history": [],
+    "calendar_events": [], # Customer-specific events
+    "conversation_stage": "new",
+    "last_message_timestamp": "",
 }
 
 DEFAULT_ASSISTANT_STATE = {
     "persona_name": "Iri-shka",
-    "admin_name": "Partner", # Default, admin can ask Iri-shka to change this.
+    "admin_name": "Partner",
     "current_emotion": {
         "neutral_helpful": 0.7, "curiosity": 0.6, "happiness": 0.7, "confidence": 0.6,
         "thoughtfulness": 0.4, "excitement": 0.1, "surprise": 0.1, "sadness": 0.0,
         "fear": 0.0, "anger": 0.0, "empathy": 0.4, "calmness": 0.5
     },
-    "active_goals": ["Be a helpful partner", "Assist with customer inquiries"], # Added new goal
+    "active_goals": ["Be a helpful partner", "Assist with customer inquiries"],
     "knowledge_gaps_identified": [],
     "internal_tasks": {
         "pending": ["Review today's news headlines", "Check for new software updates for myself"],
@@ -120,8 +127,8 @@ DEFAULT_ASSISTANT_STATE = {
         "completed": ["Initial system check completed successfully"]
     },
     "session_summary_points": [],
-    "notifications": [], # Could be used for internal notifications Iri-shka wants to show admin
-    "last_used_language": "ru", # For Iri-shka's TTS voice choice primarily
+    "notifications": [],
+    "last_used_language": "ru",
     "telegram_bot_status": "polling"
 }
 
@@ -170,24 +177,26 @@ Do NOT include any text before or after the JSON object. Ensure the JSON is well
 
 Instructions for your response and state updates:
 1.  **Primary Goal:** Respond to {admin_name_value}'s query: "{last_transcribed_text}". Your response goes into "answer_to_user".
-2.  **Update {admin_name_value}'s State:** Modify `updated_user_state` based on the request (e.g., todos, calendar events for the admin, theme changes).
-    - If {admin_name_value} asks to change the application theme (e.g., "change to dark theme"), update "gui_theme" in `updated_user_state` to either "{actual_dark_theme_value}" or "{actual_light_theme_value}".
-    - If {admin_name_value} asks to change chat text size (e.g., "make text bigger"), update "chat_font_size" in `updated_user_state` (integer between {min_font_size_value} and {max_font_size_value}, or {default_font_size_value} for reset).
+2.  **Update {admin_name_value}'s State (`updated_user_state`):** Modify based on the request.
+    - If adding/modifying calendar events for {admin_name_value}, ensure the `calendar_events` list in `updated_user_state` contains objects with "description" (string), "date" (string "YYYY-MM-DD"), and "time" (string "HH:MM", optional).
+      Example: `{{"description": "Meeting with team", "date": "2024-06-15", "time": "14:30"}}`. If time is unknown or not applicable, omit the "time" field or set it to an empty string. Keep existing events unless explicitly asked to remove or change them.
+    - If {admin_name_value} asks to change the application theme, update "gui_theme" to either "{actual_dark_theme_value}" or "{actual_light_theme_value}".
+    - If {admin_name_value} asks to change chat text size, update "chat_font_size" (integer between {min_font_size_value} and {max_font_size_value}).
 3.  **Update Your State (Iri-shka's `updated_assistant_state`):**
     - If {admin_name_value} asks you to 'call me [New Name]' or states 'my name is [New Name]', update your `admin_name` field in `updated_assistant_state` to `[New Name]`.
     - Manage your `internal_tasks` as usual.
 4.  **Handle Customer Context (If `Customer Context Active` is True):**
-    - If {admin_name_value}'s request *directly pertains to and requires modification of the Active Customer's state* (e.g., "schedule a meeting FOR customer {active_customer_id}", "add this note TO client {active_customer_id}'s record", "update intent for customer {active_customer_id}"):
-        a. You MUST modify the `Active Customer's Current State` (which was provided in `active_customer_state_string`).
-        b. The complete, modified state object for that `Active Customer ID` ({active_customer_id}) MUST be placed in the `updated_active_customer_state` field of your JSON response.
-        c. Example: If {admin_name_value} says "Book a demo for customer {active_customer_id} next Monday at 3 PM", you should add this event to the `calendar_events` list within the customer's state and return that whole modified customer state in `updated_active_customer_state`.
-        d. If the event also involves {admin_name_value} (e.g., they are an attendee), ALSO add a corresponding event to {admin_name_value}'s `calendar_events` in `updated_user_state`.
-    - If `Customer Context Active` is False, OR if the admin's request does NOT require modification of the `Active Customer's State` (e.g., admin asks a general question, or a question *about* the customer that doesn't change their state), then the `updated_active_customer_state` field in your JSON response MUST be `null` (JSON null, not the string "null") or an empty JSON object `{{}}`.
+    - If {admin_name_value}'s request *directly pertains to and requires modification of the Active Customer's state*:
+        a. Modify the `Active Customer's Current State` (provided in `active_customer_state_string`).
+        b. The complete, modified state object for `Active Customer ID` ({active_customer_id}) MUST be placed in `updated_active_customer_state`.
+        c. If adding/modifying calendar events for the customer, ensure their `calendar_events` list (within the customer's state) uses objects with "description", "date" ("YYYY-MM-DD"), and "time" ("HH:MM", optional). Example: `{{"description": "Demo for customer", "date": "2024-06-20", "time": "10:00", "attendees": ["{admin_name_value}", "{active_customer_id}"]}}`.
+        d. If the event also involves {admin_name_value}, ALSO add a corresponding event to {admin_name_value}'s `calendar_events` in `updated_user_state`.
+    - If `Customer Context Active` is False, OR the request does NOT require modification of the `Active Customer's State`, then `updated_active_customer_state` MUST be `null` or `{{}}`.
 5.  **Language:** Respond in the language indicated by `{language_instruction}` for `answer_to_user`.
-6.  **General State Management:**
-    - If the user asks to remember something (like a birthday for {admin_name_value}: name and date), update the "birthdays" list in `updated_user_state`.
-    - If the user mentions a task for {admin_name_value}, update "todos" in `updated_user_state`.
-    - If you identify a new topic for {admin_name_value}, update "current_topic" in `updated_user_state`.
+6.  **General State Management for {admin_name_value} (`updated_user_state`):**
+    - Birthdays: "birthdays" list (e.g., `{{"name": "Alice", "date": "03-25"}}`).
+    - Todos: "todos" list (list of strings).
+    - Current topic: "current_topic" string.
 
 Ensure your entire output is ONLY the specified JSON object.
 """
@@ -214,32 +223,32 @@ Therefore, the 'message_for_admin' you generate MUST be in clear, natural Russia
 The 'polite_followup_message_for_customer' should also be in Russian.
 
 Your tasks:
-1.  Analyze the `customer_interaction_text_blob`. Identify the customer's name (if provided) and their primary intent/request.
+1.  Analyze the `customer_interaction_text_blob`. Identify the customer's name (if provided and not already in their state, or if they re-state it) and their primary intent/request.
 2.  Update the `customer_state` object (derived from `customer_state_string`).
-    - Populate `customer_state.name` if identifiable from the interaction. Otherwise, keep its current value (e.g., "unknown").
+    - Populate `customer_state.name` if identifiable from the interaction and currently "unknown" or different. Otherwise, keep its current value.
     - Populate `customer_state.intent` with a concise description of their request/reason for contact.
     - If the customer requests an appointment or mentions a specific date/time for something actionable with the business (e.g., a meeting, a call), add a new event to `customer_state.calendar_events`.
-      Example event: `{{"description": "Requested call with {admin_name_value}", "date": "YYYY-MM-DD", "time": "HH:MM", "attendees": ["{admin_name_value}", "{customer_user_id}"]}}`.
-      Only add calendar events if a clear, actionable request with date/time components is present. Do not invent events.
+      **Calendar Event Structure:** Each event in `calendar_events` MUST be an object with a "description" (string), "date" (string, format "YYYY-MM-DD"), and optionally "time" (string, format "HH:MM").
+      Example: `{{"description": "Запись на консультацию", "date": "2024-07-10", "time": "15:00", "attendees": ["{admin_name_value}", "{customer_user_id}"]}}`. If time is unknown, omit the "time" field or set it to an empty string. Do not invent events; only add if a clear request with date/time is present.
     - Set `customer_state.conversation_stage` to "llm_followup_sent".
     - The `customer_state.chat_history` is already up-to-date with all messages by the system; you don't need to modify it.
 3.  Generate a `message_for_admin`. **This message MUST be in Russian.** It should be a concise, single sentence summarizing the key information for {admin_name_value}.
-    - Include the customer's identified name (e.g., "Клиент Иван..." or "Новый клиент..."). Do NOT include the customer's raw Telegram User ID in this specific message text.
+    - Include the customer's identified name (e.g., "Клиент Иван..." or "Новый клиент..."). If their name was already known and is in `customer_state.name` (not "unknown"), use "Клиент {Имя}" rather than "Новый клиент {Имя}".
     - State their primary intent.
     - Briefly mention any new calendar event you added to their state, if any.
-    - Example structure: "Партнер, новый клиент {{Имя Клиента}} интересуется {{Основной Запрос}}." or "Партнер, клиент {{Имя Клиента}} просит записать на {{Описание События}}."
+    - Example structure: "Партнер, новый клиент {{Имя Клиента}} интересуется {{Основной Запрос}}." or "Партнер, клиент {{Имя Клиента}} просит записать на {{Описание События}}." or "Партнер, клиент {{Имя Клиента}} (ID {customer_user_id}) снова обратился по поводу {{Основной Запрос}}."
 4.  Generate `polite_followup_message_for_customer`. **This message MUST be in Russian.** It should be brief and friendly.
     - Use a general closing like "Мы с вами скоро свяжемся." You can optionally personalize it slightly using the identified customer name and intent if it feels natural.
     - Example: "Спасибо, {{Имя Клиента}}! Мы получили ваш запрос по поводу {{Намерение Клиента}} и скоро с вами свяжемся."
-    - If no specific follow-up beyond the initial system acknowledgment is necessary or adds value (e.g., if the intent was very simple or unclear), output the exact string "NO_CUSTOMER_FOLLOWUP_NEEDED" for this field.
-5.  Update your own `assistant_state`. For example, add a task to `internal_tasks.pending`: "Сообщить {admin_name_value} о новом контакте {customer_user_id} ([{{Identified Customer Name}}]) по поводу [{{Identified Intent Summary}}]". Ensure this task is concise. The language for this internal task can be English or Russian, as it's for your internal records.
+    - If no specific follow-up beyond the initial system acknowledgment is necessary or adds value, output the exact string "NO_CUSTOMER_FOLLOWUP_NEEDED" for this field.
+5.  Update your own `assistant_state`. For example, add a task to `internal_tasks.pending`: "Сообщить {admin_name_value} о контакте от {customer_user_id} ([{{Identified Customer Name}}]) по поводу [{{Identified Intent Summary}}]". Ensure this task is concise.
 
 Provide ONLY a valid JSON response with the following structure. Do NOT include any text before or after the JSON object. Ensure the JSON is well-formed.
 
 {{
   "updated_customer_state": {{ ... full updated customer_state object, with "conversation_stage": "llm_followup_sent" ... }},
   "updated_assistant_state": {{ ... your full updated Iri-shka state object ... }},
-  "message_for_admin": "Your RUSSIAN summary for {admin_name_value} here (single sentence, no User ID).",
+  "message_for_admin": "Your RUSSIAN summary for {admin_name_value} here (single sentence, use known name if available).",
   "polite_followup_message_for_customer": "Your RUSSIAN polite follow-up message to the customer, or 'NO_CUSTOMER_FOLLOWUP_NEEDED'."
 }}
 """

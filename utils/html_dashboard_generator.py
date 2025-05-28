@@ -132,11 +132,9 @@ def generate_dashboard_html(
     """Generates the HTML dashboard string."""
     
     try:
-        # Corrected timezone object creation
         tz_info = timezone(timedelta(hours=config.TIMEZONE_OFFSET_HOURS))
         generation_ts = datetime.datetime.now(tz_info).strftime("%Y-%m-%d %H:%M:%S %Z")
     except Exception as e_ts:
-        # Fallback if timezone creation fails for any reason
         generation_ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC") + f" (Error getting local tz: {e_ts})"
 
 
@@ -148,13 +146,18 @@ def generate_dashboard_html(
         if not events: return "<li>No upcoming events</li>"
         html_items = []
         try:
-            # Sort events by date and time if not already sorted
-            sorted_events = sorted(events, key=lambda x: (str(x.get("date", "9999-99-99")), str(x.get("time", "99:99"))))
-        except TypeError: # If date/time are not comparable strings
+            sorted_events = sorted(
+                events, 
+                key=lambda x: (
+                    str(x.get("date", "9999-99-99")), 
+                    str(x.get("time", "99:99"))
+                )
+            )
+        except TypeError: 
             sorted_events = events 
-            # Consider logging a warning here if sorting fails
         for event in sorted_events[:max_items]:
-            desc = str(event.get("description", "Event"))[:100].replace('<','<').replace('>','>')
+            # Try 'description', then 'name', then default to 'Event'
+            desc = str(event.get("description") or event.get("name") or "Event")[:100].replace('<','<').replace('>','>')
             date_str = str(event.get("date", ""))
             time_str = str(event.get("time", ""))
             html_items.append(f"<li><strong>{desc}</strong><br><small>{date_str} {time_str}</small></li>")
@@ -163,7 +166,7 @@ def generate_dashboard_html(
     def format_chat_history_to_html(history, max_turns=3):
         if not history: return "<li>No recent messages</li>"
         html_items = []
-        for turn in history[-max_turns:]:
+        for turn in history[-max_turns:]: # Get last N turns
             user_msg = str(turn.get("user", ""))[:150].replace('<','<').replace('>','>')
             asst_msg = str(turn.get("assistant", ""))[:150].replace('<','<').replace('>','>')
             item_html = "<li class='chat-turn'>"
@@ -176,9 +179,8 @@ def generate_dashboard_html(
         return "".join(html_items)
 
     assistant_tasks = assistant_state_snapshot.get("internal_tasks", {})
-    if not isinstance(assistant_tasks, dict): assistant_tasks = {} # Ensure it's a dict
+    if not isinstance(assistant_tasks, dict): assistant_tasks = {} 
     
-    # Ensure component_statuses is a dict
     if not isinstance(component_statuses, dict): component_statuses = {}
 
     def get_comp_status_text(key, default_prefix):
@@ -188,7 +190,7 @@ def generate_dashboard_html(
 
     template_data = {
         "generation_timestamp": generation_ts,
-        "admin_name": str(admin_user_state.get("name", "Admin")),
+        "admin_name": str(admin_user_state.get("name", "Admin")).replace('<','<').replace('>','>'), # Escape name
         
         "act_status_text": get_comp_status_text("act", "ACT"), "act_status_class": get_comp_status_class("act"),
         "inet_status_text": get_comp_status_text("inet", "INET"), "inet_status_class": get_comp_status_class("inet"),
@@ -208,7 +210,7 @@ def generate_dashboard_html(
         
         "assistant_kanban_pending_html": format_list_to_html(assistant_tasks.get("pending", [])),
         "assistant_kanban_in_process_html": format_list_to_html(assistant_tasks.get("in_process", [])),
-        "assistant_kanban_completed_html": format_list_to_html(assistant_tasks.get("completed", [])[-3:], empty_message="<li>No recent completed tasks</li>"), # Show last 3 completed
+        "assistant_kanban_completed_html": format_list_to_html(assistant_tasks.get("completed", [])[-3:], empty_message="<li>No recent completed tasks</li>"),
         
         "admin_recent_chat_html": format_chat_history_to_html(admin_chat_history)
     }
@@ -216,9 +218,8 @@ def generate_dashboard_html(
     try:
         return HTML_DASHBOARD_TEMPLATE.format(**template_data)
     except KeyError as ke:
-        # This might happen if a placeholder is in HTML_DASHBOARD_TEMPLATE but not in template_data
         # logger.error(f"KeyError during HTML dashboard formatting: {ke}. Available keys: {template_data.keys()}")
         return f"<html><body>Error formatting dashboard: Missing key {ke}. Please check template.</body></html>"
     except Exception as e_format_html:
         # logger.error(f"Unexpected error during HTML dashboard formatting: {e_format_html}", exc_info=True)
-        return f"<html><body>Unexpected error formatting dashboard: {e_format_html}.</body></html>"
+        return f"<html><body>Unexpected error formatting dashboard: {str(e_format_html).replace('<','<').replace('>','>')}.</body></html>"
