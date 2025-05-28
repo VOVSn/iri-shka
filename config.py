@@ -8,45 +8,49 @@ load_dotenv()
 
 # --- File Paths ---
 DATA_FOLDER = "data"
-OUTPUT_FOLDER = "output_recordings" # Still useful if SAVE_RECORDINGS_TO_WAV is True
-TELEGRAM_VOICE_TEMP_FOLDER = f"{DATA_FOLDER}/telegram_voice_temp" # For temporary OGG/WAV files from Telegram
+OUTPUT_FOLDER = "output_recordings" 
+TELEGRAM_VOICE_TEMP_FOLDER = f"{DATA_FOLDER}/telegram_voice_temp" 
+TELEGRAM_TTS_TEMP_FOLDER = f"{DATA_FOLDER}/telegram_tts_temp" # For TTS audio to send to Telegram
 CHAT_HISTORY_FILE = f"{DATA_FOLDER}/chat_history.json"
 USER_STATE_FILE = f"{DATA_FOLDER}/user_state.json"
 ASSISTANT_STATE_FILE = f"{DATA_FOLDER}/assistant_state.json"
 
 # --- Ollama ---
 OLLAMA_API_URL = os.getenv("OLLAMA_API_URL", "http://localhost:11434/api/generate")
-OLLAMA_MODEL_NAME = "gemma3:12b" # Or "phi3" or your chosen model
+OLLAMA_MODEL_NAME = "gemma3:12b" 
 OLLAMA_REQUEST_TIMEOUT = 180
-OLLAMA_PING_TIMEOUT = 15 # Shorter timeout for the initial health check
-OLLAMA_PING_PROMPT = "You are an AI assistant. Respond with a single word: 'ready'." # Simple prompt for health check
+OLLAMA_PING_TIMEOUT = 15 
+OLLAMA_PING_PROMPT = "You are an AI assistant. Respond with a single word: 'ready'." 
 
 # --- Search Engine ---
-SEARCH_ENGINE_URL = "https://search.vovsn.com" # Base URL, path will be appended in usage
-SEARCH_ENGINE_PING_TIMEOUT = 10 # Timeout in seconds for search engine ping
+SEARCH_ENGINE_URL = "https://search.vovsn.com" 
+SEARCH_ENGINE_PING_TIMEOUT = 10 
 
 # --- Telegram Bot ---
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_ADMIN_USER_ID = os.getenv("TELEGRAM_ADMIN_USER_ID", "") # User ID of the admin
-TELEGRAM_POLLING_TIMEOUT = 20 # Seconds for telegram bot long polling timeout
+TELEGRAM_ADMIN_USER_ID = os.getenv("TELEGRAM_ADMIN_USER_ID", "") 
+TELEGRAM_POLLING_TIMEOUT = 20 
 TELEGRAM_START_MESSAGE = "Hi there! I'm Iri-shka, your friendly AI assistant, connected via Telegram. How can I help you today?"
-START_BOT_ON_APP_START = True # Whether to start the Telegram bot automatically when the app starts
+START_BOT_ON_APP_START = True 
+# New Telegram Reply Options:
+TELEGRAM_REPLY_WITH_TEXT = os.getenv("TELEGRAM_REPLY_WITH_TEXT", "True").lower() == "true"
+TELEGRAM_REPLY_WITH_VOICE = os.getenv("TELEGRAM_REPLY_WITH_VOICE", "True").lower() == "true"
 
 # --- Audio ---
 CHUNK = 1024
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
-INPUT_RATE = 16000 # Preferred recording rate for Whisper
-ALTERNATIVE_RATE = 44100 # Fallback recording rate
-SAVE_RECORDINGS_TO_WAV = False # Set to True if you want to save .wav files
+INPUT_RATE = 16000 
+ALTERNATIVE_RATE = 44100 
+SAVE_RECORDINGS_TO_WAV = False 
 
 # --- Whisper ---
-WHISPER_MODEL_SIZE = "medium" # "tiny", "base", "small", "medium", "large"
+WHISPER_MODEL_SIZE = "medium" 
 
 # --- Bark TTS ---
-BARK_MODEL_NAME = "suno/bark-small" # This can be a local path like "./bark" if models are there
-BARK_VOICE_PRESET_RU = "v2/ru_speaker_6"  # Russian female voice
-BARK_VOICE_PRESET_EN = "v2/en_speaker_9"  # English female voice (example, ensure this exists or use another like en_speaker_0)
+BARK_MODEL_NAME = "suno/bark-small" 
+BARK_VOICE_PRESET_RU = "v2/ru_speaker_6"  
+BARK_VOICE_PRESET_EN = "v2/en_speaker_9"  
 BARK_MAX_SENTENCES_PER_CHUNK = 2
 BARK_SILENCE_DURATION_MS = 300
 BARK_DO_SAMPLE = True
@@ -55,12 +59,12 @@ BARK_COARSE_TEMPERATURE = 0.7
 
 # --- Chat & State ---
 MAX_HISTORY_TURNS = 10
-TIMEZONE_OFFSET_HOURS = 3 # For GMT+3. Use negative values for zones behind UTC, e.g., -5 for EST.
+TIMEZONE_OFFSET_HOURS = 3 
 
 # --- GUI Themes & Font ---
 GUI_THEME_LIGHT = "light"
 GUI_THEME_DARK = "dark"
-DEFAULT_CHAT_FONT_SIZE = 14 # Default font size for chat display
+DEFAULT_CHAT_FONT_SIZE = 14 
 MIN_CHAT_FONT_SIZE = 10
 MAX_CHAT_FONT_SIZE = 18
 
@@ -96,15 +100,13 @@ DEFAULT_ASSISTANT_STATE = {
     "session_summary_points": [],
     "notifications": [],
     "last_used_language": "ru",
-    "telegram_bot_status": "polling" # Possible values: "off", "loading", "polling", "error", "no_token", "no_admin"
+    "telegram_bot_status": "polling" 
 }
 
 # --- Prompt Templates ---
 LANGUAGE_INSTRUCTION_NON_RUSSIAN = "The user is not speaking Russian. Please respond clearly and naturally in English."
 LANGUAGE_INSTRUCTION_RUSSIAN = "The user is speaking Russian. Please respond clearly and naturally in Russian."
 
-# Define OLLAMA_PROMPT_TEMPLATE as a raw string.
-# ALL formatting will happen in ollama_handler.py.
 OLLAMA_PROMPT_TEMPLATE = """
 You are Iri-shka, a helpful female partner.
 Your goal is to have a natural, helpful conversation and manage your state and your partner's notes and events.
@@ -153,4 +155,3 @@ Instructions for updating state:
 - If the user interacts via Telegram, your response in "answer_to_user" will be sent back to them on Telegram.
 - Your internal state 'telegram_bot_status' reflects the current status of your Telegram interface (e.g., 'polling', 'off', 'error'). You generally don't need to change this directly; it's managed by the system. However, you can be aware of it.
 """
-# NO .format() call here for OLLAMA_PROMPT_TEMPLATE
