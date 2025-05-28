@@ -25,6 +25,9 @@ ALLOWED_EXTENSIONS = [
     # '.yml', '.yaml',
     '.json',
     '.sh',
+    '.html',
+    '.js',
+    '.css',
     # Add more extensions as needed
 ]
 

@@ -1,275 +1,256 @@
 # utils/whisper_handler.py
+import threading
+import gc
+import config
+import numpy as np
 import sys
-import time
-import os
-import gc # Import gc for cleanup
 
+# Assuming logger.py is in project root
 from logger import get_logger
+logger = get_logger("Iri-shka_App.utils.whisper_handler")
 
-logger = get_logger(__name__)
-
-WHISPER_CAPABLE = False # Renamed to reflect capability
-whisper_model = None
+# --- Whisper Model Setup ---
+_whisper_model = None
+_whisper_device = None
 whisper_model_ready = False
 whisper_loading_in_progress = False
-TORCH_CUDA_AVAILABLE = False
-_torch_module = None
+_whisper_load_error_message = None
+WHISPER_CAPABLE = False
 
 try:
-    import whisper
-    WHISPER_CAPABLE = True # Set capability
-except ImportError:
-    whisper = None
-    logger.warning("Whisper library not found. Transcription will be disabled.")
-
-if WHISPER_CAPABLE:
-    try:
-        import torch
-        _torch_module = torch
-        if _torch_module.cuda.is_available():
-            TORCH_CUDA_AVAILABLE = True
-            logger.info("PyTorch CUDA is available. Whisper can use fp16 on GPU.")
-        else:
-            TORCH_CUDA_AVAILABLE = False
-            logger.info("PyTorch CUDA not available. Whisper will use CPU (or fp16=False if GPU selected).")
-    except ImportError:
-        TORCH_CUDA_AVAILABLE = False
-        _torch_module = None
-        logger.warning("PyTorch not found. Whisper fp16 optimizations on CUDA will not be available.")
-
-def _is_meta_device(model_to_check): # Renamed model parameter for clarity
-    if not _torch_module: return False
-    if hasattr(model_to_check, 'device') and model_to_check.device is not None and model_to_check.device.type == 'meta':
-        return True
-    if hasattr(model_to_check, 'parameters'):
-        try:
-            return any(p is not None and hasattr(p, 'is_meta') and p.is_meta for p in model_to_check.parameters())
-        except Exception as e:
-            logger.debug(f"Exception checking for meta device parameters: {e}", exc_info=False)
-            pass
-    return False
-
-def load_whisper_model(model_size, gui_callbacks=None):
-    global whisper_model, whisper_model_ready, whisper_loading_in_progress
-
-    if not WHISPER_CAPABLE or not _torch_module:
-        status_msg = "Whisper library not found." if not WHISPER_CAPABLE else "PyTorch not found for Whisper."
-        logger.warning(f"Cannot load Whisper model: {status_msg}")
-        if gui_callbacks:
-            if 'status_update' in gui_callbacks: gui_callbacks['status_update'](status_msg)
-            if 'hearing_status_update' in gui_callbacks: gui_callbacks['hearing_status_update']("HEAR: N/A", "na")
-            if 'speak_button_update' in gui_callbacks: gui_callbacks['speak_button_update'](False, "HEAR N/A")
-        whisper_loading_in_progress = False
-        return
-
-    if whisper_model_ready: # Already loaded
-        logger.info(f"Whisper model ({model_size if whisper_model else 'unknown size'}) already loaded and ready.")
-        if gui_callbacks:
-             if 'status_update' in gui_callbacks: gui_callbacks['status_update']("Whisper model already ready.")
-             if 'hearing_status_update' in gui_callbacks: gui_callbacks['hearing_status_update']("HEAR: RDY", "ready")
-             if 'speak_button_update' in gui_callbacks: gui_callbacks['speak_button_update'](True, "Speak")
-        return
+    import torch
+    if torch.cuda.is_available():
+        logger.info("PyTorch CUDA is available. Whisper can use fp16 on GPU.")
+        _whisper_device = "cuda"
+    else:
+        logger.info("PyTorch CUDA not available. Whisper will use CPU.")
+        _whisper_device = "cpu"
     
+    import whisper # The actual Whisper library by OpenAI
+    WHISPER_CAPABLE = True
+    logger.info("Whisper library imported successfully. Whisper features enabled.")
+except ImportError as e:
+    _whisper_load_error_message = f"Whisper library or PyTorch not found: {e}. Whisper features disabled."
+    logger.warning(_whisper_load_error_message)
+    WHISPER_CAPABLE = False
+    _whisper_device = "cpu" # Default to CPU if torch import fails before this point
+except Exception as e_init:
+    _whisper_load_error_message = f"Unexpected error during Whisper/PyTorch import: {e_init}. Whisper features disabled."
+    logger.critical(_whisper_load_error_message, exc_info=True)
+    WHISPER_CAPABLE = False
+    _whisper_device = "cpu"
+# --- End Whisper Model Setup ---
+
+
+def load_whisper_model(model_size=config.WHISPER_MODEL_SIZE, gui_callbacks=None):
+    global _whisper_model, whisper_model_ready, whisper_loading_in_progress, _whisper_load_error_message, _whisper_device
+
+    if not WHISPER_CAPABLE:
+        final_err_msg = _whisper_load_error_message or "Whisper library not imported."
+        logger.error(f"Cannot load Whisper model: {final_err_msg}")
+        if gui_callbacks and callable(gui_callbacks.get('hearing_status_update')):
+            gui_callbacks['hearing_status_update']("HEAR: N/A", "na")
+        if gui_callbacks and callable(gui_callbacks.get('speak_button_update')):
+            gui_callbacks['speak_button_update'](False, "HEAR N/A")
+        return
+
+    if whisper_model_ready:
+        logger.info(f"Whisper model '{model_size}' already loaded.")
+        if gui_callbacks and callable(gui_callbacks.get('hearing_status_update')):
+            gui_callbacks['hearing_status_update']("HEAR: RDY", "ready")
+        return
     if whisper_loading_in_progress:
         logger.info("Whisper model loading already in progress.")
         return
 
     whisper_loading_in_progress = True
-    whisper_model_ready = False # Explicitly set before attempt
+    _whisper_load_error_message = None
+    status_msg_gui = f"Loading Whisper ({model_size})..."
+    logger.info(status_msg_gui)
+
+    if gui_callbacks and callable(gui_callbacks.get('status_update')):
+        gui_callbacks['status_update'](status_msg_gui)
+    if gui_callbacks and callable(gui_callbacks.get('hearing_status_update')):
+        gui_callbacks['hearing_status_update']("HEAR: LOAD", "loading")
+    if gui_callbacks and callable(gui_callbacks.get('speak_button_update')):
+        gui_callbacks['speak_button_update'](False, "Loading Hear...")
+
+    try:
+        # _whisper_device should be set during initial import attempt
+        if not _whisper_device: # Safety check if it wasn't somehow
+             _whisper_device = "cuda" if torch.cuda.is_available() else "cpu" # type: ignore
+             logger.info(f"Re-confirmed Whisper device during load: {_whisper_device}")
+
+        logger.info(f"Attempting to load Whisper model: {model_size} onto device: {_whisper_device}")
+        _whisper_model = whisper.load_model(model_size, device=_whisper_device) # type: ignore
+        whisper_model_ready = True
+        success_msg = f"Whisper ready (Model: {model_size} on {_whisper_device})."
+        logger.info(success_msg)
+        if gui_callbacks and callable(gui_callbacks.get('status_update')):
+            gui_callbacks['status_update']("Whisper model loaded.")
+        if gui_callbacks and callable(gui_callbacks.get('hearing_status_update')):
+            gui_callbacks['hearing_status_update']("HEAR: RDY", "ready")
+        if gui_callbacks and callable(gui_callbacks.get('speak_button_update')):
+             gui_callbacks['speak_button_update'](True, "Speak") # Assume TTS is handled elsewhere for button state
+    except FileNotFoundError as fnf_err:
+        _whisper_load_error_message = f"Whisper model files for '{model_size}' not found. Error: {fnf_err}"
+        logger.error(_whisper_load_error_message, exc_info=False)
+    except RuntimeError as rt_err:
+        _whisper_load_error_message = f"RuntimeError loading Whisper model '{model_size}'. Error: {rt_err}"
+        logger.error(_whisper_load_error_message, exc_info=True)
+    except Exception as e:
+        _whisper_load_error_message = f"Failed to load Whisper model '{model_size}': {e}"
+        logger.critical(_whisper_load_error_message, exc_info=True)
     
-    if gui_callbacks:
-        if 'status_update' in gui_callbacks: gui_callbacks['status_update'](f"Initializing Whisper ({model_size})...")
-        if 'hearing_status_update' in gui_callbacks: gui_callbacks['hearing_status_update']("HEAR: CHK", "loading")
-        if 'speak_button_update' in gui_callbacks: gui_callbacks['speak_button_update'](False, "Loading...")
+    if not whisper_model_ready and gui_callbacks:
+        err_gui_msg = _whisper_load_error_message or "Whisper load failed (unknown error)."
+        if callable(gui_callbacks.get('status_update')):
+            gui_callbacks['status_update'](f"Whisper Error: {err_gui_msg[:60]}...")
+        if callable(gui_callbacks.get('hearing_status_update')):
+            gui_callbacks['hearing_status_update']("HEAR: ERR", "error")
+        if callable(gui_callbacks.get('messagebox_error')):
+            gui_callbacks['messagebox_error']("Whisper Load Error", err_gui_msg)
+        if callable(gui_callbacks.get('speak_button_update')):
+            gui_callbacks['speak_button_update'](False, "HEAR ERR")
+    whisper_loading_in_progress = False
+
+
+def transcribe_audio(audio_np_array: np.ndarray, language=None, task="transcribe", gui_callbacks=None):
+    """
+    Transcribes audio using the loaded Whisper model.
+    """
+    if not whisper_model_ready or not _whisper_model:
+        logger.error("Whisper model not ready for transcription.")
+        return None, "Whisper model not loaded.", None
+    if not isinstance(audio_np_array, np.ndarray):
+        logger.error("Invalid audio data type for transcription (must be NumPy array).")
+        return None, "Invalid audio data type.", None
+    if audio_np_array.size == 0:
+        logger.info("Empty audio array provided for transcription.")
+        return "", None, None # No error, but empty text
+
+    logger.info(f"Transcribing audio. Language: {language or 'auto-detect'}, Task: {task}. Input shape: {audio_np_array.shape}")
+    if gui_callbacks and callable(gui_callbacks.get('status_update')):
+        gui_callbacks['status_update'](f"Transcribing (Whisper)... Lang: {language or 'auto'}")
+
+    transcribed_text = None
+    error_msg = None
+    detected_language_code = None
 
     try:
-        logger.info(f"Loading Whisper model: {model_size}...")
-        logger.info(f"Attempting to load model '{model_size}' to CPU initially.")
-        # Explicitly manage local_files_only based on environment or config if needed
-        # Forcing download=False might be too restrictive if model isn't cached.
-        # Whisper's default behavior handles caching well.
-        loaded_model = whisper.load_model(model_size, device="cpu") # download_root=os.path.join(config.DATA_FOLDER, "whisper_models")
-        logger.info(f"Model '{model_size}' loaded, initial device: {getattr(loaded_model, 'device', 'Unknown')}.")
+        if audio_np_array.dtype != np.float32:
+            logger.warning(f"Audio array dtype is {audio_np_array.dtype}, converting to float32 for Whisper.")
+            audio_np_array = audio_np_array.astype(np.float32)
 
-        if _is_meta_device(loaded_model):
-            logger.warning(f"Model or parameters still on 'meta' device after initial load. Forcing to CPU again.")
-            loaded_model.to("cpu")
-            if _is_meta_device(loaded_model):
-                 logger.warning("Model remains on 'meta' device after forced CPU move.")
+        # Explicitly prepare arguments for the transcribe method
+        # These are top-level arguments for whisper.model.Whisper.transcribe
+        args_for_transcribe = {
+            "audio": audio_np_array,
+            "task": str(task),  # Ensure task is a string
+            "fp16": (_whisper_device == "cuda") # Use fp16 only if on CUDA
+        }
+        if language is not None: # Only add 'language' if it's not None (for auto-detection)
+            args_for_transcribe["language"] = str(language) # Ensure language is a string
 
-        current_model_for_use = loaded_model
+        # Optional: Add other direct arguments supported by transcribe method if needed
+        # args_for_transcribe["verbose"] = False
+        # args_for_transcribe["temperature"] = 0.0 # For more deterministic output
+        # args_for_transcribe["condition_on_previous_text"] = True # Default
+        # args_for_transcribe["without_timestamps"] = False # Default
 
-        if TORCH_CUDA_AVAILABLE:
-            logger.info(f"CUDA available. Attempting to move model '{model_size}' to CUDA.")
-            if _is_meta_device(current_model_for_use):
-                logger.error("Model is on 'meta' device before CUDA transfer attempt. Using CPU forcefully.")
-                whisper_model = current_model_for_use.to("cpu")
-            else:
-                try:
-                    gpu_model = current_model_for_use.to("cuda")
-                    whisper_model = gpu_model
-                    logger.info(f"Model '{model_size}' successfully moved to CUDA. Device: {getattr(whisper_model, 'device', 'Unknown')}")
-                except Exception as e_gpu:
-                    logger.error(f"Error moving model to GPU: {e_gpu}. Using CPU model.", exc_info=True)
-                    whisper_model = current_model_for_use.to("cpu") 
-        else:
-            whisper_model = current_model_for_use.to("cpu") 
-            logger.info(f"Using model '{model_size}' on CPU. Device: {getattr(whisper_model, 'device', 'Unknown')}")
+        log_args_display = {k:v for k,v in args_for_transcribe.items() if k != 'audio'} # Don't log the huge audio array
+        logger.debug(f"Calling _whisper_model.transcribe() with direct arguments: {log_args_display}")
+        
+        result = _whisper_model.transcribe(**args_for_transcribe)
 
-        if _is_meta_device(whisper_model):
-             msg = "Whisper model parameters are on 'meta' device after all setup, transcription will likely fail."
-             logger.critical(msg)
-             if gui_callbacks and 'messagebox_error' in gui_callbacks:
-                 gui_callbacks['messagebox_error']("Whisper Critical Error", msg)
-             whisper_model_ready = False # Ensure it's not marked ready
-        else:
-            logger.info("Whisper model configured and device placement confirmed.")
-            whisper_model_ready = True # Mark as ready
+        transcribed_text = result.get("text", "").strip() # type: ignore
+        detected_language_code = result.get("language", None) # type: ignore
+        logger.info(f"Transcription result: '{transcribed_text[:70]}...', Detected lang: {detected_language_code}")
 
+        if not transcribed_text:
+            logger.info("Transcription resulted in empty text.")
+            # error_msg = "No speech detected or recognized." # Caller can interpret empty text
 
-        if gui_callbacks:
-            if 'status_update' in gui_callbacks:
-                gui_callbacks['status_update']("Whisper model ready." if whisper_model_ready else "Whisper model config issue.")
-            if 'hearing_status_update' in gui_callbacks:
-                gui_callbacks['hearing_status_update']("HEAR: RDY" if whisper_model_ready else "HEAR: NRDY", "ready" if whisper_model_ready else "error")
-
-
-    except Exception as e:
-        error_msg_full = f"Error loading Whisper model ('{model_size}'): {e}"
-        logger.error(error_msg_full, exc_info=True)
-        if gui_callbacks:
-            if 'messagebox_error' in gui_callbacks:
-                 gui_callbacks['messagebox_error']("Whisper Load Error", f"Could not load Whisper: {str(e)[:150]}")
-            if 'status_update' in gui_callbacks:
-                 gui_callbacks['status_update']("Whisper load failed.")
-            if 'hearing_status_update' in gui_callbacks:
-                 gui_callbacks['hearing_status_update']("HEAR: NRDY", "error")
-        whisper_model = None
-        whisper_model_ready = False
-    finally:
-        if gui_callbacks and 'speak_button_update' in gui_callbacks:
-            if whisper_model_ready:
-                 gui_callbacks['speak_button_update'](True, "Speak")
-            else:
-                 gui_callbacks['speak_button_update'](False, "HEAR NRDY")
-        whisper_loading_in_progress = False
-
-def transcribe_audio(audio_numpy_array, language=None, gui_callbacks=None):
-    if not whisper_model_ready or whisper_model is None:
-        err_msg = "Whisper model not ready for transcription."
-        logger.warning(err_msg)
-        if gui_callbacks and 'status_update' in gui_callbacks:
-            gui_callbacks['status_update']("Transcription skipped: Whisper model not ready.")
-        return None, err_msg, None
-
-    if _is_meta_device(whisper_model):
-        msg = "Whisper model is on meta device, transcription will fail."
-        logger.error(msg)
-        if gui_callbacks:
-            if 'status_update' in gui_callbacks: gui_callbacks['status_update'](msg)
-            if 'messagebox_error' in gui_callbacks: gui_callbacks['messagebox_error']("Whisper Error", msg)
-        return None, msg, None
-
-    try:
-        if gui_callbacks and 'status_update' in gui_callbacks:
-            gui_callbacks['status_update']("Transcribing (Whisper)...")
-        logger.info("Starting transcription...")
-
-        use_fp16 = False
-        model_device_type = 'cpu'
-        if hasattr(whisper_model, 'device') and whisper_model.device is not None:
-            model_device_type = whisper_model.device.type
-
-        if TORCH_CUDA_AVAILABLE and model_device_type == 'cuda':
-            use_fp16 = True
-            logger.info("Using fp16 for transcription on CUDA.")
-        else:
-            logger.info(f"Not using fp16 (model on {model_device_type}, CUDA available: {TORCH_CUDA_AVAILABLE}).")
-
-
-        transcribe_options = {"fp16": use_fp16}
-        if language: 
-            transcribe_options["language"] = language
-            logger.info(f"Forcing language to: {language}")
-        else: 
-            logger.info("Auto-detecting language.")
-
-        result = whisper_model.transcribe(audio_numpy_array, **transcribe_options)
-        transcribed_text = result["text"].strip()
-        detected_language_code = result.get("language", "unknown") 
-
-        logger.info(f"Transcription: \"{transcribed_text}\" (Detected Lang: {detected_language_code})")
-        if gui_callbacks and 'status_update' in gui_callbacks:
-            gui_callbacks['status_update']("Transcription complete.")
-        return transcribed_text, None, detected_language_code
-    except RuntimeError as r_err: 
-        if "meta" in str(r_err).lower():
-            msg = f"Whisper transcription failed due to model likely on 'meta' device: {r_err}"
-            logger.critical(msg, exc_info=True)
-            if gui_callbacks:
-                if 'status_update' in gui_callbacks: gui_callbacks['status_update']("Whisper: Meta device error.")
-                if 'messagebox_error' in gui_callbacks: gui_callbacks['messagebox_error']("Whisper Critical Error", msg)
-            return None, msg, None
-        else:
-            error_msg = f"Whisper transcription runtime error: {r_err}"
-            logger.error(error_msg, exc_info=True)
-            if gui_callbacks:
-                if 'status_update' in gui_callbacks: gui_callbacks['status_update'](error_msg[:100])
-                if 'messagebox_error' in gui_callbacks: gui_callbacks['messagebox_error']("Whisper Transcription Error", error_msg)
-            return None, error_msg, None
-    except Exception as e:
-        error_msg = f"Whisper transcription error: {e}"
+    except TypeError as te:
+        error_msg = f"TypeError during Whisper transcription (often 'unhashable type: dict'): {te}"
         logger.error(error_msg, exc_info=True)
-        if gui_callbacks:
-            if 'status_update' in gui_callbacks: gui_callbacks['status_update'](error_msg[:100])
-            if 'messagebox_error' in gui_callbacks: gui_callbacks['messagebox_error']("Whisper Transcription Error", error_msg)
-        return None, error_msg, None
+        if gui_callbacks and callable(gui_callbacks.get('status_update')):
+            gui_callbacks['status_update'](f"Tx Err (Type): {str(te)[:40]}")
+    except RuntimeError as rt_err: # Catch runtime errors e.g. CUDA issues during transcribe
+        error_msg = f"RuntimeError during Whisper transcription: {rt_err}"
+        logger.error(error_msg, exc_info=True)
+        if gui_callbacks and callable(gui_callbacks.get('status_update')):
+            gui_callbacks['status_update'](f"Tx Err (Runtime): {str(rt_err)[:40]}")
+    except Exception as e:
+        error_msg = f"Unexpected error during Whisper transcription: {e}"
+        logger.error(error_msg, exc_info=True)
+        if gui_callbacks and callable(gui_callbacks.get('status_update')):
+            gui_callbacks['status_update'](f"Tx Err (Gen): {str(e)[:50]}")
+    
+    if gui_callbacks and callable(gui_callbacks.get('status_update')):
+        if error_msg:
+            gui_callbacks['status_update'](f"Tx Err: {error_msg[:30]}")
+        elif not transcribed_text:
+            gui_callbacks['status_update'](f"Tx: Empty (Lang: {detected_language_code or 'N/A'})")
+        else:
+            # This might be too quick if transcription is fast and next status update overwrites it.
+            # Usually, main logic handles "Ready" status after LLM.
+            # gui_callbacks['status_update'](f"Tx OK (Lang: {detected_language_code or 'N/A'})")
+            pass # Let the calling function in main.py set the next overall status
 
-def unload_whisper_model(gui_callbacks=None): # Renamed from cleanup_whisper_model for clarity
-    global whisper_model, whisper_model_ready, whisper_loading_in_progress
-    if WHISPER_CAPABLE and whisper_model is not None:
-        logger.info("Releasing Whisper model resources...")
-        try:
-            model_was_on_cuda = False
-            if _torch_module is not None and hasattr(whisper_model, 'device') and \
-               whisper_model.device and whisper_model.device.type == 'cuda':
-                model_was_on_cuda = True
+    return transcribed_text, error_msg, detected_language_code
 
-            if model_was_on_cuda:
-                logger.info("Attempting to move Whisper model to CPU before deletion...")
-                try:
-                    whisper_model = whisper_model.cpu()
-                    logger.info("Moved Whisper model to CPU.")
-                except Exception as e_cpu_move:
-                    logger.error(f"Error moving model to CPU during cleanup: {e_cpu_move}", exc_info=True)
 
-            del whisper_model # Delete reference
-            whisper_model = None
-            
-            gc.collect() # Call garbage collector
+def unload_whisper_model(gui_callbacks=None):
+    global _whisper_model, whisper_model_ready, whisper_loading_in_progress, _whisper_load_error_message
+    logger.info("Unloading Whisper model...")
 
-            if model_was_on_cuda and _torch_module is not None and TORCH_CUDA_AVAILABLE and \
-               hasattr(_torch_module.cuda, 'empty_cache'):
-                _torch_module.cuda.empty_cache()
-                logger.info("PyTorch CUDA cache cleared.")
-            logger.info("Whisper model resources released.")
-        except Exception as e:
-            logger.error(f"Error during Whisper model cleanup: {e}", exc_info=True)
+    if whisper_loading_in_progress:
+        logger.warning("Cannot unload Whisper model: loading is currently in progress.")
+        return
 
+    if _whisper_model:
+        del _whisper_model
+        _whisper_model = None
+        gc.collect()
+        if _whisper_device == "cuda" and torch.cuda.is_available(): # type: ignore
+            try:
+                torch.cuda.empty_cache() # type: ignore
+                logger.info("PyTorch CUDA cache cleared after Whisper model unload.")
+            except Exception as e_cuda_clear:
+                logger.warning(f"Could not clear CUDA cache: {e_cuda_clear}")
+    
     whisper_model_ready = False
-    whisper_loading_in_progress = False # Reset loading flag
-    # whisper_model is already None or set to None above
+    _whisper_load_error_message = None
     logger.info("Whisper model unloaded.")
+
     if gui_callbacks:
-        if 'status_update' in gui_callbacks:
+        if callable(gui_callbacks.get('status_update')):
             gui_callbacks['status_update']("Whisper model unloaded.")
-        if 'hearing_status_update' in gui_callbacks:
+        if callable(gui_callbacks.get('hearing_status_update')):
             gui_callbacks['hearing_status_update']("HEAR: OFF", "off")
-        if 'speak_button_update' in gui_callbacks:
+        if callable(gui_callbacks.get('speak_button_update')):
             gui_callbacks['speak_button_update'](False, "HEAR OFF")
 
-# This is for full application exit
+
 def full_shutdown_whisper_module():
     logger.info("Full Whisper module shutdown for application exit.")
     unload_whisper_model()
-    # Any other module-specific cleanup if needed.
+    logger.info("Whisper module shutdown sequence complete.")
+
+def is_whisper_ready():
+    return WHISPER_CAPABLE and whisper_model_ready and not whisper_loading_in_progress
+
+def get_status_short() -> str:
+    if not WHISPER_CAPABLE: return "N/A"
+    if whisper_loading_in_progress: return "LOAD"
+    if whisper_model_ready: return "RDY"
+    if _whisper_load_error_message: return "ERR"
+    return "OFF"
+
+def get_status_type() -> str:
+    if not WHISPER_CAPABLE: return "na"
+    if whisper_loading_in_progress: return "loading"
+    if whisper_model_ready: return "ready"
+    if _whisper_load_error_message: return "error"
+    return "off"

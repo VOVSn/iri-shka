@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iri-shka Web UI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Iri-shka AI Assistant (Web)</h1>
+        
+        <button id="recordButton">Start Recording</button>
+        
+        <h2>Conversation</h2>
+        <div class="chat-area" id="chatDisplay">
+            <p class="system-message">Click "Start Recording" to speak.</p>
+        </div>
+
+        <audio id="audioPlayback" controls></audio>
+
+        <h2>System Status</h2>
+        <div class="status-area">
+            <div class="status-item">
+                <span class="status-label">Web UI:</span>
+                <span id="webUiStatus" class="status-value status-info">Checking...</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Ollama (Mind):</span>
+                <span id="ollamaStatus" class="status-value status-info">Checking...</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Whisper (Hear):</span>
+                <span id="whisperStatus" class="status-value status-info">Checking...</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Bark (Voice):</span>
+                <span id="barkStatus" class="status-value status-info">Checking...</span>
+            </div>
+            <div id="appStatus">Status: Initializing...</div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
