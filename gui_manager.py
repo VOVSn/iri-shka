@@ -420,22 +420,21 @@ class GUIManager:
             if not events_today:
                 self.calendar_events_display.insert(tk.END, f"No events for {self.selected_calendar_date.strftime('%Y-%m-%d')}.")
             else:
-                # Refined sorting for events within the selected day
                 def get_event_time_for_day_sort(event_dict):
-                    time_str = event_dict.get("time") # Get time, could be None or empty
-                    if time_str: # If time_str is not None and not empty
+                    time_str = event_dict.get("time") 
+                    if time_str: 
                         try:
                             return datetime.strptime(time_str, "%H:%M").time()
                         except ValueError:
                             logger.warning(f"Invalid time string '{time_str}' for event '{event_dict.get('description', 'N/A')}' on {self.selected_calendar_date}, sorting as if no time.")
-                            return datetime.max.time() # Sort events with invalid time last for the day
-                    return datetime.max.time() # Sort events with no time (None or empty) last for the day
+                            return datetime.max.time() 
+                    return datetime.max.time() 
 
                 sorted_day_events = sorted(events_today, key=get_event_time_for_day_sort)
                 
                 for ev in sorted_day_events:
-                    desc = ev.get('description', ev.get('name', 'Event')) # Try 'description', then 'name'
-                    time_prefix = f"{ev.get('time')}: " if ev.get('time') else "" # Display time only if present and not empty
+                    desc = ev.get('description', ev.get('name', 'Event')) 
+                    time_prefix = f"{ev.get('time')}: " if ev.get('time') else "" 
                     self.calendar_events_display.insert(tk.END, f"{time_prefix}{desc}\n")
         self.calendar_events_display.config(state=tk.DISABLED); self.calendar_events_display.see(tk.END)
 
@@ -513,13 +512,23 @@ class GUIManager:
         colors = self.get_current_theme_colors()
         label_bg = colors.get("component_status_label_default_bg", colors["frame_bg"])
         label_fg = colors.get("component_status_label_default_fg", colors["fg"])
-        if status_category == "ready": label_bg = "#90EE90"; label_fg = "dark green"
-        elif status_category in ["loaded", "saved", "fresh", "idle"]: label_bg = "#ADD8E6"; label_fg = "navy"
+
+        # Color mapping based on status_category
+        if status_category == "ready": label_bg = "#90EE90"; label_fg = "dark green" 
+        elif status_category in ["idle", "saved", "loaded", "polling"]: # Green states
+            label_bg = "#90EE90"; label_fg = "dark green"
+        elif status_category in ["fresh"]: # Blue states
+            label_bg = "#ADD8E6"; label_fg = "navy"
         elif status_category == "off": label_bg = "#D3D3D3"; label_fg = "dimgray"
-        elif status_category in ["loading", "checking", "pinging", "thinking"]: label_bg = "#FFFFE0"; label_fg = "darkgoldenrod"
-        elif status_category in ["error", "na", "timeout", "conn_error", "http_502", "http_other", "InitFail", "unreachable", "bad_token", "net_error"]: label_bg = "#FFA07A"; label_fg = "darkred"
-        elif status_category == "polling": label_bg = "#90EE90"; label_fg = "dark green"
-        elif status_category == "no_token" or status_category == "no_admin": label_bg = "#FFA07A"; label_fg = "darkred"
+        elif status_category in ["loading", "checking", "pinging", "thinking", "busy"]: # Yellow states
+            label_bg = "#FFFFE0"; label_fg = "darkgoldenrod"
+        elif status_category in ["error", "na", "timeout", "conn_error", "http_502", "http_other", "InitFail", "unreachable", "bad_token", "net_error"]: # Red states
+            label_bg = "#FFA07A"; label_fg = "darkred"
+        elif status_category == "no_token" or status_category == "no_admin": # Also Red
+            label_bg = "#FFA07A"; label_fg = "darkred"
+        # Default if not matched (should ideally not happen with good categories)
+        # else: use default label_bg, label_fg defined earlier
+
         widget_label.config(text=text_to_display, background=label_bg, foreground=label_fg)
         widget_frame.config(background=label_bg)
 
@@ -617,18 +626,17 @@ class GUIManager:
                 if source == "gui":
                     lang_code = turn.get("detected_language_code_for_gui_display")
                     if lang_code: final_user_text = f"{user_msg_content} (Lang: {lang_code})"
-                elif source == "telegram_admin": user_prefix, user_tag = "You (Admin TG): ", "user_telegram_tag" # Match admin TG source
+                elif source == "telegram_admin": user_prefix, user_tag = "You (Admin TG): ", "user_telegram_tag" 
                 elif source == "telegram_voice_admin":
-                    user_prefix, user_tag = "You (Admin TG Voice): ", "user_telegram_voice_tag" # Match admin TG voice source
+                    user_prefix, user_tag = "You (Admin TG Voice): ", "user_telegram_voice_tag" 
                     lang_code = turn.get("detected_language_code_for_tele_voice_display")
                     if lang_code: final_user_text = f"{user_msg_content} (Lang: {lang_code})"
 
                 asst_prefix, asst_tag = "Iri-shka: ", "assistant_tag"
-                # Handle assistant messages to admin via Telegram for GUI display
                 if source == "telegram_admin" or source == "telegram_voice_admin":
                      asst_prefix, asst_tag = "Iri-shka (to Admin TG): ", "assistant_telegram_tag"
-                elif source == "customer_summary_internal" or source == "customer_summary_report": # For customer summaries shown to admin
-                     asst_prefix, asst_tag = "Iri-shka (System Report): ", "assistant_tag" # Or a new tag
+                elif source == "customer_summary_internal" or source == "customer_summary_report": 
+                     asst_prefix, asst_tag = "Iri-shka (System Report): ", "assistant_tag" 
 
                 if user_msg_content: self._add_message_to_display_internal(f"{user_prefix}{final_user_text}\n", (user_tag,))
                 if assistant_msg:
@@ -670,7 +678,6 @@ class GUIManager:
 
         if TKCALENDAR_AVAILABLE and self.calendar_widget:
             self._mark_dates_with_events_on_calendar(self.all_calendar_events_data)
-        # Always update the list display, even if calendar widget isn't available or marking failed
         self._update_filtered_event_display()
 
 
