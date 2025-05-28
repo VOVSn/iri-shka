@@ -15,6 +15,16 @@ TELEGRAM_TTS_TEMP_FOLDER = f"{DATA_FOLDER}/telegram_tts_temp" # For outgoing TTS
 CHAT_HISTORY_FILE = f"{DATA_FOLDER}/chat_history.json" # Admin's chat
 USER_STATE_FILE = f"{DATA_FOLDER}/user_state.json"     # Admin's state
 ASSISTANT_STATE_FILE = f"{DATA_FOLDER}/assistant_state.json"
+WEB_UI_AUDIO_TEMP_FOLDER = f"{DATA_FOLDER}/webui_audio_temp" # For incoming web audio & conversions
+WEB_UI_TTS_SERVE_FOLDER = f"{DATA_FOLDER}/webui_tts_serve"   # For TTS audio files served to web UI
+
+# --- Web UI ---
+ENABLE_WEB_UI = os.getenv("ENABLE_WEB_UI", "True").lower() == "true"
+WEB_UI_PORT = int(os.getenv("WEB_UI_PORT", "8080"))
+# Flag to indicate if Pydub should be used for server-side conversion of web audio.
+# If False, web_app.py will expect WAV or compatible audio directly, or fail.
+PYDUB_AVAILABLE_FOR_WEB_CONVERSION = os.getenv("PYDUB_AVAILABLE_FOR_WEB_CONVERSION", "True").lower() == "true"
+
 
 # --- Ollama ---
 OLLAMA_API_URL = os.getenv("OLLAMA_API_URL", "http://localhost:11434/api/generate")
@@ -250,5 +260,23 @@ Provide ONLY a valid JSON response with the following structure. Do NOT include 
   "updated_assistant_state": {{ ... your full updated Iri-shka state object ... }},
   "message_for_admin": "Your RUSSIAN summary for {admin_name_value} here (single sentence, use known name if available).",
   "polite_followup_message_for_customer": "Your RUSSIAN polite follow-up message to the customer, or 'NO_CUSTOMER_FOLLOWUP_NEEDED'."
+}}
+"""
+
+# For Web UI Interactions (Simplified)
+OLLAMA_WEB_PROMPT_TEMPLATE = """
+You are Iri-shka, a helpful AI assistant speaking to a user via a web interface.
+The user said: "{web_user_input}"
+Current time is: {current_time_string}
+Respond clearly and naturally to the user. Your response should be a single string of text.
+If the user's language is Russian, respond in Russian. Otherwise, respond in English.
+For example, if the user says "Привет", you might respond "Привет! Чем могу помочь?".
+If the user says "Hello", you might respond "Hello! How can I help you today?".
+
+Provide ONLY a valid JSON response with the following structure.
+Do NOT include any text before or after the JSON object. Ensure the JSON is well-formed.
+
+{{
+  "answer_to_user": "Your natural language response here."
 }}
 """
