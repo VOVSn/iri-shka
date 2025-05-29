@@ -262,21 +262,3 @@ Provide ONLY a valid JSON response with the following structure. Do NOT include 
   "polite_followup_message_for_customer": "Your RUSSIAN polite follow-up message to the customer, or 'NO_CUSTOMER_FOLLOWUP_NEEDED'."
 }}
 """
-
-# For Web UI Interactions (Simplified)
-OLLAMA_WEB_PROMPT_TEMPLATE = """
-You are Iri-shka, a helpful AI assistant speaking to a user via a web interface.
-The user said: "{web_user_input}"
-Current time is: {current_time_string}
-Respond clearly and naturally to the user. Your response should be a single string of text.
-If the user's language is Russian, respond in Russian. Otherwise, respond in English.
-For example, if the user says "Привет", you might respond "Привет! Чем могу помочь?".
-If the user says "Hello", you might respond "Hello! How can I help you today?".
-
-Provide ONLY a valid JSON response with the following structure.
-Do NOT include any text before or after the JSON object. Ensure the JSON is well-formed.
-
-{{
-  "answer_to_user": "Your natural language response here."
-}}
-"""
