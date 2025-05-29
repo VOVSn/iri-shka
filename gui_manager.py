@@ -91,8 +91,20 @@ class GUIManager:
         self.tray_icon = None
         self.tray_thread = None
 
+        # Determine project root based on current script's location (assuming gui_manager.py is in root or one level down)
+        # current_script_directory = os.path.dirname(os.path.realpath(__file__))
+        # project_root_directory = os.path.dirname(current_script_directory) if os.path.basename(current_script_directory) == "gui" else current_script_directory
+        # self.icon_path = os.path.join(project_root_directory, 'icon.ico')
+        
+        # Simpler path assumption if gui_manager.py is in project root
+        # If gui_manager.py is in a 'gui' subdirectory, this needs adjustment or main.py should pass the root path.
+        # For this example, assuming gui_manager.py is in the project root with icon.ico
         current_script_directory = os.path.dirname(os.path.realpath(__file__))
-        self.icon_path = os.path.join(current_script_directory, 'icon.ico')
+        # If structure is python_tts_test/gui_manager.py and icon.ico is in python_tts_test/
+        self.icon_path = os.path.join(current_script_directory, 'icon.ico') 
+        # If structure is python_tts_test/gui/gui_manager.py and icon.ico is in python_tts_test/
+        # self.icon_path = os.path.join(os.path.dirname(current_script_directory), 'icon.ico')
+
 
         if not os.path.exists(self.icon_path):
             logger.error(f"icon.ico not found at expected location: {self.icon_path}. Tray icon will not be created.")
@@ -235,7 +247,12 @@ class GUIManager:
         self.mind_status_frame = tk.Frame(status_row2_frame, width=component_box_width, height=component_box_height, relief=tk.SUNKEN, borderwidth=1, background=component_frame_bg); self.mind_status_frame.pack(side=tk.LEFT, padx=2); self.mind_status_frame.pack_propagate(False); self.mind_status_text_label = ttk.Label(self.mind_status_frame, text="MIND: CHK", style="ComponentStatus.TLabel"); self.mind_status_text_label.pack(expand=True, fill=tk.BOTH)
         self.art_status_frame = tk.Frame(status_row2_frame, width=component_box_width, height=component_box_height, relief=tk.SUNKEN, borderwidth=1, background=component_frame_bg); self.art_status_frame.pack(side=tk.LEFT, padx=(2,0)); self.art_status_frame.pack_propagate(False); self.art_status_text_label = ttk.Label(self.art_status_frame, text="ART: OFF", style="ComponentStatus.TLabel"); self.art_status_text_label.pack(expand=True, fill=tk.BOTH)
         right_info_panel_frame = ttk.Frame(self.combined_status_bar_frame); right_info_panel_frame.pack(side=tk.LEFT, padx=(10,2), pady=0, fill=tk.BOTH, expand=True)
-        self.speak_button = ttk.Button(right_info_panel_frame, text="Loading...", command=self.action_callbacks['toggle_speaking_recording'], state=tk.DISABLED, style="Speak.TButton"); self.speak_button.pack(side=tk.RIGHT, fill=tk.Y, padx=(5,2), pady=2)
+        # self.speak_button = ttk.Button(right_info_panel_frame, text="Loading...", command=self.action_callbacks['toggle_speaking_recording'], state=tk.DISABLED, style="Speak.TButton"); self.speak_button.pack(side=tk.RIGHT, fill=tk.Y, padx=(5,2), pady=2)
+        self.speak_button = ttk.Button(right_info_panel_frame, text="Loading...", state=tk.DISABLED, style="Speak.TButton")
+        self.speak_button.pack(side=tk.RIGHT, fill=tk.Y, padx=(5,2), pady=2)
+        self.speak_button.bind("<ButtonPress-1>", self._handle_speak_button_press)
+        self.speak_button.bind("<ButtonRelease-1>", self._handle_speak_button_release)
+
         left_detail_frame = ttk.Frame(right_info_panel_frame); left_detail_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=2, padx=(0,5))
         self.app_status_label = ttk.Label(left_detail_frame, text="Initializing...", style="AppStatus.TLabel", relief=tk.FLAT); self.app_status_label.pack(side=tk.TOP, fill=tk.BOTH, expand=True, pady=(0,2))
         gpu_stack_frame = ttk.Frame(left_detail_frame); gpu_stack_frame.pack(side=tk.BOTTOM, fill=tk.X)
@@ -315,20 +332,46 @@ class GUIManager:
         self.chat_history_display.tag_configure("assistant_web_admin_tag", foreground=colors["assistant_msg_fg"], lmargin1=tg_margin, lmargin2=tg_margin)
         self.chat_history_display.tag_configure("assistant_web_admin_error_tag", foreground=colors["assistant_error_fg"], lmargin1=tg_margin, lmargin2=tg_margin)
 
+    def _handle_speak_button_press(self, event=None):
+        logger.debug("Speak button pressed.")
+        if 'start_gui_recording' in self.action_callbacks:
+            self.action_callbacks['start_gui_recording']()
+
+    def _handle_speak_button_release(self, event=None):
+        logger.debug("Speak button released.")
+        if 'stop_gui_recording_and_process' in self.action_callbacks:
+            self.action_callbacks['stop_gui_recording_and_process']()
+
     def _handle_space_key_press(self, event=None):
         try:
             focused_widget = self.app_window.focus_get()
             if isinstance(focused_widget, (tk.Entry, scrolledtext.ScrolledText, tk.Text)):
-                logger.debug("Space press ignored, focus is on an input widget.")
-                return # Do not toggle recording
+                logger.debug("Space press ignored for recording, focus is on an input widget.")
+                return 
         except tk.TclError as e:
-            logger.debug(f"TclError getting focused widget (e.g., window not focused): {e}. Allowing space toggle.")
+            logger.debug(f"TclError getting focused widget (e.g., window not focused): {e}. Allowing space press for recording.")
         except Exception as e_focus:
-            logger.warning(f"Unexpected error checking focus for space key: {e_focus}. Allowing space toggle.", exc_info=True)
+            logger.warning(f"Unexpected error checking focus for space key: {e_focus}. Allowing space press for recording.", exc_info=True)
 
-        if 'toggle_speaking_recording' in self.action_callbacks:
-            logger.debug("Space press: Calling toggle_speaking_recording.")
-            self.action_callbacks['toggle_speaking_recording']()
+        logger.debug("Space key pressed for recording.")
+        if 'start_gui_recording' in self.action_callbacks:
+            self.action_callbacks['start_gui_recording']()
+        return "break" 
+
+    def _handle_space_key_release(self, event=None):
+        try:
+            focused_widget = self.app_window.focus_get()
+            if isinstance(focused_widget, (tk.Entry, scrolledtext.ScrolledText, tk.Text)):
+                logger.debug("Space release ignored for recording, focus is on an input widget.")
+                return
+        except tk.TclError: 
+            logger.debug(f"TclError getting focused widget for space release (e.g., window not focused). Allowing release.")
+        except Exception as e_focus:
+            logger.warning(f"Unexpected error checking focus for space key release: {e_focus}. Allowing release.", exc_info=True)
+
+        logger.debug("Space key released for recording.")
+        if 'stop_gui_recording_and_process' in self.action_callbacks:
+            self.action_callbacks['stop_gui_recording_and_process']()
         return "break"
 
     def _on_close_button_override(self):
@@ -337,7 +380,10 @@ class GUIManager:
     def _setup_protocol_handlers(self):
         if self.app_window:
             self.app_window.protocol("WM_DELETE_WINDOW", self._on_close_button_override)
-            self.app_window.bind_all("<KeyRelease-space>", self._handle_space_key_press, add="+")
+            # Bind space press and release globally
+            self.app_window.bind_all("<KeyPress-space>", self._handle_space_key_press, add="+")
+            self.app_window.bind_all("<KeyRelease-space>", self._handle_space_key_release, add="+")
+
 
     def _setup_tray_icon(self):
         if not PYSTRAY_AVAILABLE or not self.app_window or not self.icon_path or not os.path.exists(self.icon_path):

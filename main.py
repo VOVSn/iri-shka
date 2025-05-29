@@ -1,4 +1,3 @@
-# main.py
 import tkinter as tk
 import threading
 import sys
@@ -79,14 +78,14 @@ if whisper_handler.WHISPER_CAPABLE:
     except ImportError:
         logger.warning("Failed to import OpenAI whisper module in main.py; Admin Telegram voice WAV loading might fail.")
 
-gui: GUIManager = None
-app_tk_instance: tk.Tk = None
+gui: GUIManager = None # type: ignore
+app_tk_instance: tk.Tk = None # type: ignore
 _active_gpu_monitor: gpu_monitor.GPUMonitor = None # type: ignore
-telegram_bot_handler_instance: TelegramBotHandler = None
-customer_interaction_manager_instance: CustomerInteractionManager = None
+telegram_bot_handler_instance: TelegramBotHandler = None # type: ignore
+customer_interaction_manager_instance: CustomerInteractionManager = None # type: ignore
 admin_llm_message_queue = queue.Queue()
-llm_task_executor: ThreadPoolExecutor = None
-flask_thread_instance: threading.Thread = None # To keep a reference to the Flask thread
+llm_task_executor: ThreadPoolExecutor = None # type: ignore
+flask_thread_instance: threading.Thread = None # type: ignore # To keep a reference to the Flask thread
 
 chat_history: list = []
 user_state: dict = {}
@@ -183,7 +182,7 @@ def on_gui_recording_finished(recorded_sample_rate):
                 mind_type = "ready" if ollama_ready else "error"
                 gui_callbacks['mind_status_update'](mind_text, mind_type)
     finally:
-        # This ensures the speak button is always reset to a sensible state after recording attempt.
+        # This ensures the speak button is always reset to a sensible idle state after processing.
         if gui_callbacks and callable(gui_callbacks.get('speak_button_update')):
             speak_btn_ready = whisper_handler.is_whisper_ready()
             gui_callbacks['speak_button_update'](speak_btn_ready, "Speak" if speak_btn_ready else "HEAR NRDY")
@@ -291,19 +290,60 @@ def handle_web_admin_interaction_result(bridge_result_data: dict):
     logger.info(f"MAIN: WebAppBridge result processing finished.")
 
 
-def toggle_speaking_recording():
-    if not audio_processor.is_recording_active():
-        if not (whisper_handler.WHISPER_CAPABLE and whisper_handler.is_whisper_ready()):
-            logger.warning("Cannot start recording: Whisper module not ready."); return
-        if tts_manager.is_tts_loading(): logger.info("Cannot start recording: TTS loading."); return
-        tts_manager.stop_current_speech(gui_callbacks)
-        if audio_processor.start_recording(gui_callbacks):
-            if gui_callbacks and callable(gui_callbacks.get('speak_button_update')):
-                gui_callbacks['speak_button_update'](True, "Listening...")
-    else:
-        audio_processor.stop_recording() # This will trigger on_gui_recording_finished
+def start_gui_recording():
+    """Starts GUI audio recording if conditions are met."""
+    global gui_callbacks, audio_processor, whisper_handler, tts_manager
+    logger.debug("start_gui_recording called.")
+
+    if audio_processor.is_recording_active():
+        logger.debug("Start recording requested, but already active.")
+        return
+
+    if not (whisper_handler.WHISPER_CAPABLE and whisper_handler.is_whisper_ready()):
+        logger.warning("Cannot start recording: Whisper module not ready.")
+        # Button state should already reflect "HEAR NRDY" or similar
+        return
+    if tts_manager.is_tts_loading():
+        logger.info("Cannot start recording: TTS loading.")
+        return
+
+    tts_manager.stop_current_speech(gui_callbacks)
+
+    if audio_processor.start_recording(gui_callbacks): # gui_callbacks includes on_recording_finished
         if gui_callbacks and callable(gui_callbacks.get('speak_button_update')):
-            gui_callbacks['speak_button_update'](False, "Processing...")
+            gui_callbacks['speak_button_update'](True, "Listening...") # Enable button, set text
+    else:
+        # audio_processor.start_recording failed. It handles its own error messages (messagebox, status_update).
+        # We need to ensure the button is reset to a proper idle state.
+        logger.warning("audio_processor.start_recording returned False. Resetting button to idle state.")
+        if gui_callbacks and callable(gui_callbacks.get('speak_button_update')):
+            speak_btn_ready_for_idle = whisper_handler.is_whisper_ready()
+            gui_callbacks['speak_button_update'](speak_btn_ready_for_idle, "Speak" if speak_btn_ready_for_idle else "HEAR NRDY")
+
+def stop_gui_recording_and_process():
+    """Stops GUI audio recording and initiates processing."""
+    global gui_callbacks, audio_processor
+    logger.debug("stop_gui_recording_and_process called.")
+
+    if not audio_processor.is_recording_active():
+        logger.debug("Stop recording requested, but not active.")
+        # Ensure button is in a consistent idle state if somehow stop is called without active recording
+        if gui_callbacks and callable(gui_callbacks.get('speak_button_update')):
+            speak_btn_ready_for_idle = whisper_handler.is_whisper_ready()
+            current_text = gui.speak_button.cget("text") if gui and gui.speak_button else "Speak"
+            if current_text == "Listening...": # If it was stuck on listening
+                 gui_callbacks['speak_button_update'](speak_btn_ready_for_idle, "Speak" if speak_btn_ready_for_idle else "HEAR NRDY")
+        return
+
+    # This call will internally set audio_processor._is_recording to False,
+    # which then causes the recording thread to finish and call `on_gui_recording_finished`.
+    audio_processor.stop_recording()
+
+    if gui_callbacks and callable(gui_callbacks.get('speak_button_update')):
+        # Button becomes disabled and shows "Processing..."
+        # `on_gui_recording_finished` will set it to "Speak" or "HEAR NRDY" later.
+        gui_callbacks['speak_button_update'](False, "Processing...")
+
 
 def _unload_bark_model_action(): threading.Thread(target=lambda: tts_manager.unload_bark_model(gui_callbacks), daemon=True, name="UnloadBarkThread").start()
 def _reload_bark_model_action(): threading.Thread(target=lambda: tts_manager.load_bark_resources(gui_callbacks), daemon=True, name="ReloadBarkThread").start()
@@ -452,7 +492,10 @@ if __name__ == "__main__":
         logger.critical(f"CRITICAL Tkinter root init: {e_tk_root}", exc_info=True); sys.exit(1)
 
     action_callbacks_for_gui = {
-        'toggle_speaking_recording': toggle_speaking_recording, 'on_exit': on_app_exit,
+        # 'toggle_speaking_recording': toggle_speaking_recording, # Removed
+        'start_gui_recording': start_gui_recording,             # Added
+        'stop_gui_recording_and_process': stop_gui_recording_and_process, # Added
+        'on_exit': on_app_exit,
         'unload_bark_model': _unload_bark_model_action, 'reload_bark_model': _reload_bark_model_action,
         'unload_whisper_model': _unload_whisper_model_action, 'reload_whisper_model': _reload_whisper_model_action,
         'start_telegram_bot': _start_telegram_bot_action, 'stop_telegram_bot': _stop_telegram_bot_action,
@@ -492,7 +535,7 @@ if __name__ == "__main__":
         for cb_key, method_name in callback_mapping.items():
             if hasattr(gui, method_name) and callable(getattr(gui, method_name)):
                 gui_callbacks[cb_key] = getattr(gui, method_name)
-        gui_callbacks['on_recording_finished'] = on_gui_recording_finished
+        gui_callbacks['on_recording_finished'] = on_gui_recording_finished # This one is special for audio_processor
     else: logger.error("GUI object is None, callbacks cannot be populated.")
 
     logger.info("Populating GUI with initial state data...")
@@ -545,7 +588,7 @@ if __name__ == "__main__":
         web_logger.info("Web UI is ENABLED. Initializing bridge and Flask thread...")
         web_bridge_instance = WebAppBridge(
             main_app_ollama_ready_flag_getter=lambda: ollama_ready,
-            main_app_status_label_getter_fn=lambda: gui.app_status_label.cget("text") if gui and hasattr(gui, 'app_status_label') and gui.app_status_label and gui.app_status_label.winfo_exists() else "N/A",
+            main_app_status_label_getter_fn=lambda: gui.app_status_label.cget("text") if gui and hasattr(gui, 'app_status_label') and gui.app_status_label and gui.app_status_label.winfo_exists() else "N/A", #type: ignore
             whisper_handler_module=whisper_handler, ollama_handler_module=ollama_handler,
             tts_manager_module=tts_manager, _whisper_module_for_load_audio_ref=_whisper_module_for_load_audio,
             state_manager_module_ref=state_manager, gui_callbacks_ref=gui_callbacks,
@@ -598,7 +641,7 @@ if __name__ == "__main__":
 
     if app_tk_instance and hasattr(app_tk_instance, 'winfo_exists') and app_tk_instance.winfo_exists():
         app_tk_instance.after(300, _process_queued_admin_llm_messages)
-        app_tk_instance.after(1000, _periodic_status_and_task_checker)
+        app_tk_instance.after(1000, _periodic_status_and_task_checker) # Initial call after 1 sec
     else: logger.error("Tkinter instance not available for scheduling periodic tasks.")
 
     logger.info("Starting Tkinter mainloop...")
