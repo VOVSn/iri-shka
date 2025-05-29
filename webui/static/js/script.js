@@ -8,60 +8,65 @@ document.addEventListener('DOMContentLoaded', () => {
     const ollamaStatus = document.getElementById('ollamaStatus');
     const whisperStatus = document.getElementById('whisperStatus');
     const barkStatus = document.getElementById('barkStatus');
-    const webUiStatus = document.getElementById('webUiStatus');
+    const telegramStatus = document.getElementById('telegramStatus'); // Changed from webUiStatus
 
 
     let mediaRecorder;
     let audioChunks = [];
     let isRecording = false;
 
+    // ... (Recording Logic - addMessageToChat remain the same) ...
     // --- Recording Logic ---
     recordButton.addEventListener('click', async () => {
         if (!isRecording) {
             try {
+                audioPlayback.pause();
+                audioPlayback.src = ""; 
+
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                mediaRecorder = new MediaRecorder(stream);
+                mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
 
                 mediaRecorder.ondataavailable = event => {
                     audioChunks.push(event.data);
                 };
 
                 mediaRecorder.onstop = async () => {
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' }); // or 'audio/ogg' depending on browser
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                     audioChunks = [];
-                    stream.getTracks().forEach(track => track.stop()); // Stop microphone access
+                    stream.getTracks().forEach(track => track.stop()); 
                     await sendAudioToServer(audioBlob);
-                    recordButton.disabled = false;
-                    recordButton.textContent = 'Start Recording';
-                    recordButton.classList.remove('recording');
-                    isRecording = false;
                 };
 
                 mediaRecorder.start();
                 recordButton.textContent = 'Stop Recording';
                 recordButton.classList.add('recording');
                 isRecording = true;
-                recordButton.disabled = false; // Re-enable in case it was disabled during processing
+                recordButton.disabled = false; 
                 addMessageToChat('Recording started...', 'system-message');
 
             } catch (err) {
                 console.error('Error accessing microphone:', err);
-                addMessageToChat('Error accessing microphone. Please grant permission.', 'error-message');
+                addMessageToChat(`Error accessing microphone: ${err.message}. Please grant permission.`, 'error-message');
                 recordButton.disabled = false;
                 recordButton.textContent = 'Start Recording';
+                recordButton.classList.remove('recording');
                 isRecording = false;
             }
         } else {
-            mediaRecorder.stop();
-            recordButton.disabled = true; // Disable until processing is done
+            if (mediaRecorder && mediaRecorder.state !== "inactive") {
+                mediaRecorder.stop();
+            }
+            recordButton.disabled = true; 
             recordButton.textContent = 'Processing...';
             addMessageToChat('Recording stopped. Processing...', 'system-message');
+            isRecording = false; 
+            recordButton.classList.remove('recording');
         }
     });
 
     async function sendAudioToServer(audioBlob) {
         const formData = new FormData();
-        formData.append('audio_data', audioBlob, 'user_audio.webm'); // Filename is optional but good practice
+        formData.append('audio_data', audioBlob, 'user_audio.webm');
 
         try {
             appStatus.textContent = 'Sending audio to server...';
@@ -85,14 +90,53 @@ document.addEventListener('DOMContentLoaded', () => {
                 addMessageToChat(`Iri-shka: ${data.text_response}`, 'assistant-message');
             }
             if (data.audio_url) {
+                addMessageToChat('Preparing Iri-shka\'s voice...', 'system-message');
+                
+                audioPlayback.oncanplaythrough = () => {
+                    console.log("Audio is ready to play through.");
+                    addMessageToChat('Audio ready. Attempting to play...', 'system-message');
+                    const playPromise = audioPlayback.play();
+                    if (playPromise !== undefined) {
+                        playPromise.then(_ => {
+                            console.log("Audio playback started successfully via promise.");
+                            addMessageToChat("Playing Iri-shka's voice now.", 'system-message');
+                        }).catch(error => {
+                            console.error("Audio playback was prevented by browser:", error);
+                            addMessageToChat('Autoplay prevented. Click player to play manually.', 'system-message');
+                        });
+                    }
+                    audioPlayback.oncanplaythrough = null; 
+                    audioPlayback.onerror = null; 
+                };
+
+                audioPlayback.onerror = (e) => {
+                    console.error("Error loading audio source:", e, audioPlayback.error);
+                    let errorDetail = "Unknown audio error";
+                    if (audioPlayback.error) {
+                        switch (audioPlayback.error.code) {
+                            case MediaError.MEDIA_ERR_ABORTED: errorDetail = 'Playback aborted by user.'; break;
+                            case MediaError.MEDIA_ERR_NETWORK: errorDetail = 'A network error caused the audio download to fail.'; break;
+                            case MediaError.MEDIA_ERR_DECODE: errorDetail = 'Audio decoding error. File might be corrupt or unsupported.'; break;
+                            case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED: errorDetail = 'Audio source format not supported.'; break;
+                            default: errorDetail = 'An unknown error occurred.';
+                        }
+                    }
+                    addMessageToChat(`Error playing audio: ${errorDetail}`, 'error-message');
+                    appStatus.textContent = `Audio Error: ${errorDetail}`;
+                    audioPlayback.oncanplaythrough = null;
+                    audioPlayback.onerror = null;
+                };
+                
                 audioPlayback.src = data.audio_url;
-                audioPlayback.play().catch(e => console.error("Error playing audio:", e));
-                addMessageToChat('Playing Iri-shka\'s voice...', 'system-message');
+                audioPlayback.load(); 
+            } else if (!data.error && data.text_response) {
+                 addMessageToChat("Iri-shka (text only).", 'system-message');
             }
+
             if(data.error) {
                 addMessageToChat(`Error: ${data.error}`, 'error-message');
                 appStatus.textContent = `Error: ${data.error}`;
-            } else {
+            } else if (!data.audio_url) { 
                  appStatus.textContent = 'Ready.';
             }
 
@@ -102,7 +146,7 @@ document.addEventListener('DOMContentLoaded', () => {
             appStatus.textContent = `Error: ${error.message}`;
         } finally {
             recordButton.disabled = false;
-            if(isRecording) { // Should not happen if onstop is used right, but a safeguard
+            if(isRecording) { 
                  recordButton.textContent = 'Stop Recording';
                  recordButton.classList.add('recording');
             } else {
@@ -115,19 +159,25 @@ document.addEventListener('DOMContentLoaded', () => {
     function addMessageToChat(message, type) {
         const p = document.createElement('p');
         p.textContent = message;
-        p.className = type;
+        p.className = type; 
         chatDisplay.appendChild(p);
-        chatDisplay.scrollTop = chatDisplay.scrollHeight; // Scroll to bottom
+        chatDisplay.scrollTop = chatDisplay.scrollHeight; 
     }
+
 
     // --- Status Update Logic ---
     function getStatusClass(statusTypeStr) {
-        if (!statusTypeStr) return 'status-info';
+        if (!statusTypeStr) return 'status-info'; // Default for undefined type
         const s = statusTypeStr.toLowerCase();
+        // Green states
         if (["ready", "polling", "loaded", "saved", "fresh", "idle", "ok_gpu", "ok"].includes(s)) return "status-ok";
-        if (["loading", "checking", "pinging", "thinking", "warn"].includes(s)) return "status-warn";
-        if (["error", "na", "n/a", "timeout", "conn_error", "http_502", "http_other", "initfail", "unreachable", "bad_token", "net_error", "err"].includes(s)) return "status-error";
+        // Yellow states
+        if (["loading", "checking", "pinging", "thinking", "warn", "busy"].includes(s)) return "status-warn";
+        // Red states
+        if (["error", "na", "n/a", "timeout", "conn_error", "http_502", "http_other", "initfail", "unreachable", "bad_token", "net_error", "err", "no_token", "no_admin"].includes(s)) return "status-error";
+        // Grey states
         if (s === "off") return "status-off";
+        // Default blue for unknown or other informational states
         return "status-info";
     }
 
@@ -136,38 +186,71 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch('/status');
             if (!response.ok) {
                 console.warn('Failed to fetch status:', response.status);
-                webUiStatus.textContent = 'N/A';
-                webUiStatus.className = `status-value ${getStatusClass('error')}`;
+                // Indicate error for all statuses if fetch fails badly
+                [ollamaStatus, whisperStatus, barkStatus, telegramStatus].forEach(el => {
+                    if(el) {
+                        el.textContent = 'N/A (Fetch Err)';
+                        el.className = `status-value ${getStatusClass('error')}`;
+                    }
+                });
+                if (!appStatus.textContent.startsWith("Error")) { 
+                    appStatus.textContent = 'Error fetching status from server.';
+                }
                 return;
             }
             const statusData = await response.json();
 
-            ollamaStatus.textContent = statusData.ollama.text || 'N/A';
-            ollamaStatus.className = `status-value ${getStatusClass(statusData.ollama.type)}`;
+            if (statusData.ollama) {
+                ollamaStatus.textContent = statusData.ollama.text || 'N/A';
+                ollamaStatus.className = `status-value ${getStatusClass(statusData.ollama.type)}`;
+            }
 
-            whisperStatus.textContent = statusData.whisper.text || 'N/A';
-            whisperStatus.className = `status-value ${getStatusClass(statusData.whisper.type)}`;
+            if (statusData.whisper) {
+                whisperStatus.textContent = statusData.whisper.text || 'N/A';
+                whisperStatus.className = `status-value ${getStatusClass(statusData.whisper.type)}`;
+            }
 
-            barkStatus.textContent = statusData.bark.text || 'N/A';
-            barkStatus.className = `status-value ${getStatusClass(statusData.bark.type)}`;
+            if (statusData.bark) {
+                barkStatus.textContent = statusData.bark.text || 'N/A';
+                barkStatus.className = `status-value ${getStatusClass(statusData.bark.type)}`;
+            }
             
-            webUiStatus.textContent = statusData.web_ui.text || 'OK';
-            webUiStatus.className = `status-value ${getStatusClass(statusData.web_ui.type)}`;
+            if (statusData.telegram) { // Changed from web_ui to telegram
+                telegramStatus.textContent = statusData.telegram.text || 'N/A';
+                telegramStatus.className = `status-value ${getStatusClass(statusData.telegram.type)}`;
+            }
 
-            appStatus.textContent = statusData.app_overall_status || 'Ready.';
 
-            // Enable/disable record button based on Whisper status
-            recordButton.disabled = !(statusData.whisper.type === 'ready' || statusData.whisper.type === 'ok');
+            if (!appStatus.textContent.startsWith("Error:") || appStatus.textContent.includes("fetching status") || appStatus.textContent.includes("Audio ready") || appStatus.textContent.includes("Playing Iri-shka's voice")) {
+                 if (audioPlayback.paused || audioPlayback.ended || !audioPlayback.src.includes("web_tts_output")) {
+                    appStatus.textContent = statusData.app_overall_status || 'Ready.';
+                 }
+            }
 
+            const whisperIsActionable = statusData.whisper && (statusData.whisper.type === 'ready' || statusData.whisper.type === 'ok' || statusData.whisper.type === 'idle');
+            if (!isRecording) { 
+                recordButton.disabled = !whisperIsActionable;
+                if (!whisperIsActionable && recordButton.textContent !== 'Processing...') {
+                    recordButton.textContent = `Whisper: ${statusData.whisper ? (statusData.whisper.text || 'N/A') : 'N/A'}`;
+                } else if (whisperIsActionable && recordButton.textContent !== 'Processing...') {
+                    recordButton.textContent = 'Start Recording';
+                }
+            }
 
         } catch (error) {
             console.error('Error fetching status:', error);
-            webUiStatus.textContent = 'Error';
-            webUiStatus.className = `status-value ${getStatusClass('error')}`;
-            appStatus.textContent = 'Error fetching status.';
+            [ollamaStatus, whisperStatus, barkStatus, telegramStatus].forEach(el => {
+                if(el) {
+                    el.textContent = 'Error';
+                    el.className = `status-value ${getStatusClass('error')}`;
+                }
+            });
+             if (!appStatus.textContent.startsWith("Error:") || appStatus.textContent.includes("fetching status")) {
+                appStatus.textContent = 'Error fetching status.';
+            }
         }
     }
 
-    fetchAndUpdateStatus(); // Initial status fetch
-    setInterval(fetchAndUpdateStatus, 5000); // Poll every 5 seconds
+    fetchAndUpdateStatus(); 
+    setInterval(fetchAndUpdateStatus, 3000);
 });

@@ -21,10 +21,7 @@
 
         <h2>System Status</h2>
         <div class="status-area">
-            <div class="status-item">
-                <span class="status-label">Web UI:</span>
-                <span id="webUiStatus" class="status-value status-info">Checking...</span>
-            </div>
+            <!-- WebUI status is removed from here, implied by page loading -->
             <div class="status-item">
                 <span class="status-label">Ollama (Mind):</span>
                 <span id="ollamaStatus" class="status-value status-info">Checking...</span>
@@ -36,6 +33,10 @@
             <div class="status-item">
                 <span class="status-label">Bark (Voice):</span>
                 <span id="barkStatus" class="status-value status-info">Checking...</span>
+            </div>
+            <div class="status-item"> <!-- This was WebUI, now Telegram -->
+                <span class="status-label">Telegram Bot:</span>
+                <span id="telegramStatus" class="status-value status-info">Checking...</span>
             </div>
             <div id="appStatus">Status: Initializing...</div>
         </div>

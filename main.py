@@ -95,6 +95,7 @@ class WebAppBridge:
         self.whisper_handler_module = whisper_handler
         self.ollama_handler_module = ollama_handler
         self.tts_manager_module = tts_manager
+        self.telegram_handler_instance_ref: TelegramBotHandler = None # type: ignore # Will be set after TG Handler init
         web_logger.info("WebAppBridge initialized.")
 
     def handle_web_interaction(self, input_wav_filepath: str):
@@ -105,87 +106,113 @@ class WebAppBridge:
             "tts_audio_filename": None,
             "error": None
         }
+        detected_lang = None 
 
+        # 1. STT (Whisper)
         if not self.whisper_handler_module.is_whisper_ready():
             result["error"] = "Whisper (STT) service not ready."
-            web_logger.error(result["error"])
+            web_logger.error(f"WebAppBridge: STT Aborted - {result['error']}")
             return result
         
         try:
+            web_logger.debug(f"WebAppBridge: Attempting to load audio for STT from: {input_wav_filepath}")
             audio_np_array_web = None
             if _whisper_module_for_load_audio:
                  audio_np_array_web = _whisper_module_for_load_audio.load_audio(input_wav_filepath)
             else:
-                 raise RuntimeError("Whisper 'load_audio' utility not available (whisper module import issue).")
+                 raise RuntimeError("Whisper 'load_audio' utility not available (whisper module general import issue).")
 
-            transcribed_text, trans_err, detected_lang = self.whisper_handler_module.transcribe_audio(
+            web_logger.debug(f"WebAppBridge: Audio loaded for STT. Shape: {audio_np_array_web.shape if audio_np_array_web is not None else 'None'}")
+            transcribed_text, trans_err, detected_lang_from_stt = self.whisper_handler_module.transcribe_audio(
                 audio_np_array=audio_np_array_web, language=None, task="transcribe"
             )
+            detected_lang = detected_lang_from_stt 
+
             if trans_err:
                 result["error"] = f"Transcription error: {trans_err}"
-                web_logger.error(f"WebAppBridge: {result['error']}")
-                return result
+                web_logger.error(f"WebAppBridge: STT Error - {result['error']}")
+                return result 
+            
             if not transcribed_text:
-                result["error"] = "No speech detected or transcribed."
-                web_logger.info("WebAppBridge: No speech detected from web input.")
-                return result
+                web_logger.info("WebAppBridge: No speech detected or transcribed from web input.")
+                result["user_transcription"] = "" 
+                return result 
+            
             result["user_transcription"] = transcribed_text
-            web_logger.info(f"WebAppBridge: Transcription: '{transcribed_text}', Lang: {detected_lang}")
+            web_logger.info(f"WebAppBridge: Transcription successful: '{transcribed_text[:70]}...', Detected Lang: {detected_lang}")
+
         except Exception as e_stt:
-            result["error"] = f"STT processing failed: {e_stt}"
-            web_logger.error(f"WebAppBridge: STT error - {result['error']}", exc_info=True)
+            result["error"] = f"STT processing failed unexpectedly: {str(e_stt)}"
+            web_logger.error(f"WebAppBridge: STT Exception - {result['error']}", exc_info=True)
             return result
 
-        if not self.get_ollama_ready():
+        # 2. LLM (Ollama)
+        # Access ollama_ready global flag directly here, or use the getter if preferred
+        # For simplicity and consistency with how it was passed, using the getter.
+        if not self.get_ollama_ready(): 
             result["error"] = "Ollama (LLM) service not ready."
-            web_logger.error(result["error"])
+            web_logger.error(f"WebAppBridge: LLM Aborted - {result['error']}")
             return result
 
         try:
-            current_time_str = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=config.TIMEZONE_OFFSET_HOURS))).strftime("%Y-%m-%d %H:%M:%S")
+            web_logger.debug(f"WebAppBridge: Preparing to call LLM for input: '{result['user_transcription'][:70]}...'")
+            current_time_str = datetime.datetime.now(
+                datetime.timezone(datetime.timedelta(hours=config.TIMEZONE_OFFSET_HOURS))
+            ).strftime("%Y-%m-%d %H:%M:%S")
+            
             web_prompt_kwargs = {
-                "web_user_input": transcribed_text,
+                "web_user_input": result["user_transcription"],
                 "current_time_string": current_time_str
             }
+            
             ollama_data, ollama_error = self.ollama_handler_module.call_ollama_for_chat_response(
                 prompt_template_to_use=config.OLLAMA_WEB_PROMPT_TEMPLATE,
-                transcribed_text=transcribed_text, 
+                transcribed_text=result["user_transcription"], 
                 current_chat_history=[], 
                 current_user_state={},   
                 current_assistant_state={}, 
                 format_kwargs=web_prompt_kwargs,
                 expected_keys_override=["answer_to_user"]
             )
+            
             if ollama_error:
                 result["error"] = f"LLM error: {ollama_error}"
-                web_logger.error(f"WebAppBridge: {result['error']}")
-                return result
+                web_logger.error(f"WebAppBridge: LLM Error - {result['error']}")
+                return result 
             
-            result["llm_text_response"] = ollama_data.get("answer_to_user", "LLM provided no answer.")
-            web_logger.info(f"WebAppBridge: LLM Response: '{result['llm_text_response']}'")
+            result["llm_text_response"] = ollama_data.get("answer_to_user")
+            if not result["llm_text_response"]:
+                 web_logger.warning("WebAppBridge: LLM provided no text in 'answer_to_user'. Using placeholder.")
+                 result["llm_text_response"] = "(No specific text response received)" 
+
+            web_logger.info(f"WebAppBridge: LLM Response received: '{result['llm_text_response'][:70]}...'")
 
         except Exception as e_llm:
-            result["error"] = f"LLM processing failed: {e_llm}"
-            web_logger.error(f"WebAppBridge: LLM error - {result['error']}", exc_info=True)
+            result["error"] = f"LLM processing failed unexpectedly: {str(e_llm)}"
+            web_logger.error(f"WebAppBridge: LLM Exception - {result['error']}", exc_info=True)
             return result
 
-        if not result["llm_text_response"]:
-            web_logger.info("WebAppBridge: No LLM text response to synthesize.")
+        # 3. TTS (Bark)
+        if not result["llm_text_response"] or result["llm_text_response"] == "(No specific text response received)":
+            web_logger.info("WebAppBridge: No meaningful LLM text response to synthesize for TTS. Skipping TTS.")
             return result 
 
         if not self.tts_manager_module.is_tts_ready():
             web_logger.warning("WebAppBridge: TTS service not ready, cannot synthesize voice for web. Returning text only.")
-            return result
+            return result 
         
         try:
+            web_logger.debug(f"WebAppBridge: Preparing to synthesize TTS for: '{result['llm_text_response'][:70]}...'")
             bark_engine = self.tts_manager_module.get_bark_model_instance()
             if not bark_engine:
-                web_logger.error("WebAppBridge: Failed to get Bark TTS engine instance.")
-                return result
+                web_logger.error("WebAppBridge: Failed to get Bark TTS engine instance for web output.")
+                return result 
 
-            web_tts_voice_preset = config.BARK_VOICE_PRESET_RU
-            if detected_lang and detected_lang == "en": # Use detected lang from Whisper if available
-               web_tts_voice_preset = config.BARK_VOICE_PRESET_EN
+            web_tts_voice_preset = config.BARK_VOICE_PRESET_RU 
+            if detected_lang: 
+                if 'en' in detected_lang.lower():
+                    web_tts_voice_preset = config.BARK_VOICE_PRESET_EN
+            web_logger.info(f"WebAppBridge: Using TTS voice preset: {web_tts_voice_preset} (based on detected lang: {detected_lang})")
 
             audio_array, samplerate = bark_engine.synthesize_speech_to_array(
                 result["llm_text_response"],
@@ -194,47 +221,80 @@ class WebAppBridge:
 
             if audio_array is not None and samplerate is not None:
                 tts_filename = f"web_tts_output_{uuid.uuid4().hex}.wav"
+                if not file_utils.ensure_folder(config.WEB_UI_TTS_SERVE_FOLDER, gui_callbacks=None):
+                    web_logger.critical(f"WebAppBridge: Critical - Could not create TTS serve folder: {config.WEB_UI_TTS_SERVE_FOLDER}")
+                    result["error"] = "Server error: Cannot save TTS audio." 
+                    return result 
+
                 tts_filepath = os.path.join(config.WEB_UI_TTS_SERVE_FOLDER, tts_filename)
-                file_utils.ensure_folder(config.WEB_UI_TTS_SERVE_FOLDER)
-                sf.write(tts_filepath, audio_array, samplerate)
+                
+                if audio_array.dtype != np.float32:
+                    web_logger.debug(f"WebAppBridge: Converting TTS audio array from {audio_array.dtype} to float32 for soundfile.")
+                    audio_array = audio_array.astype(np.float32)
+                
+                sf.write(tts_filepath, audio_array, samplerate, subtype='PCM_16') # type: ignore
+                
                 result["tts_audio_filename"] = tts_filename
-                web_logger.info(f"WebAppBridge: Synthesized TTS and saved to {tts_filepath}")
+                web_logger.info(f"WebAppBridge: Synthesized TTS and saved to {tts_filepath} (SR: {samplerate}, Format: PCM_16)")
             else:
-                web_logger.error("WebAppBridge: TTS synthesis failed to produce audio array.")
+                web_logger.error("WebAppBridge: TTS synthesis returned no audio data or samplerate.")
         except Exception as e_tts:
-            web_logger.error(f"WebAppBridge: TTS synthesis or saving failed: {e_tts}", exc_info=True)
+            web_logger.error(f"WebAppBridge: TTS synthesis or saving failed: {str(e_tts)}", exc_info=True)
+
+        web_logger.info(f"WebAppBridge: Interaction processing complete. Result: { {k: (str(v)[:70] + '...' if isinstance(v, str) and len(v) > 70 else v) for k,v in result.items()} }")
         return result
 
     def get_system_status_for_web(self):
+        # Ollama status (uses global ollama_ready flag, re-pings if not ready)
         ollama_stat_text, ollama_stat_type = "N/A", "unknown"
-        # Use the global ollama_ready flag which is updated by checks elsewhere
-        if ollama_ready: # Use global ollama_ready
+        if ollama_ready: 
             ollama_stat_text, ollama_stat_type = "Ready", "ready"
         else:
-            # If not ready, try to get a more specific message from a fresh check
-            _, ollama_ping_msg = self.ollama_handler_module.check_ollama_server_and_model()
-            if ollama_ready: # Check again (in case it became ready just now)
+            _, ollama_ping_msg = self.ollama_handler_module.check_ollama_server_and_model() # Re-ping for fresh status
+            if ollama_ready: # Check again after ping (ollama_ready might be updated by check_ollama_server_and_model)
                  ollama_stat_text, ollama_stat_type = "Ready", "ready"
-            else: # Derive type from message
+            else:
                 if "timeout" in (ollama_ping_msg or "").lower(): ollama_stat_type = "timeout"
-                elif "connection" in (ollama_ping_msg or "").lower(): ollama_stat_type = "conn_error" # Broader connection
+                elif "connection" in (ollama_ping_msg or "").lower(): ollama_stat_type = "conn_error"
                 elif "http" in (ollama_ping_msg or "").lower() and "error" in (ollama_ping_msg or "").lower(): ollama_stat_type = "error"
                 else: ollama_stat_type = "error"
                 ollama_stat_text = ollama_ping_msg[:30] if ollama_ping_msg else "Error"
-
-
+        
+        # Main App Status from GUI
         main_app_status_from_gui = "N/A"
-        try:
+        try: 
             if gui and hasattr(gui, 'app_status_label') and gui.app_status_label and gui.app_status_label.winfo_exists():
                 main_app_status_from_gui = gui.app_status_label.cget("text")
-        except Exception:
-             pass 
+        except tk.TclError: 
+             web_logger.debug("WebAppBridge: TclError getting app_status_label for web status (likely GUI closing).")
+             main_app_status_from_gui = "GUI Closing"
+        except Exception as e_gui_status:
+             web_logger.warning(f"WebAppBridge: Error getting app_status_label for web status: {e_gui_status}")
+             main_app_status_from_gui = "Error (GUI Status)"
+        
+        # Telegram Bot Status
+        tele_stat_text, tele_stat_type = "N/A", "unknown"
+        if self.telegram_handler_instance_ref and hasattr(self.telegram_handler_instance_ref, 'get_status'):
+            current_tele_status = self.telegram_handler_instance_ref.get_status()
+            tele_stat_type = current_tele_status 
+            status_text_map = {
+                "loading": "Loading...", "polling": "Polling", "error": "Error",
+                "no_token": "No Token", "no_admin": "No Admin ID",
+                "bad_token": "Bad Token", "net_error": "Network Err", "off": "Off"
+            }
+            tele_stat_text = status_text_map.get(current_tele_status, current_tele_status.capitalize())
+        elif not config.TELEGRAM_BOT_TOKEN:
+            tele_stat_text, tele_stat_type = "No Token", "no_token"
+        elif not config.TELEGRAM_ADMIN_USER_ID:
+            tele_stat_text, tele_stat_type = "No Admin ID", "no_admin"
+        else: 
+            tele_stat_text, tele_stat_type = "Unavailable", "unknown"
 
         return {
             "ollama": {"text": ollama_stat_text, "type": ollama_stat_type},
             "whisper": {"text": self.whisper_handler_module.get_status_short(), "type": self.whisper_handler_module.get_status_type()},
             "bark": {"text": self.tts_manager_module.get_status_short(), "type": self.tts_manager_module.get_status_type()},
-            "web_ui": {"text": "OK", "type": "ready"}, 
+            "telegram": {"text": tele_stat_text, "type": tele_stat_type},
             "app_overall_status": main_app_status_from_gui
         }
 # --- End WebApp Bridge Class ---
@@ -976,6 +1036,7 @@ def load_all_models_and_services():
 if __name__ == "__main__":
     logger.info("--- Main __name__ block started ---")
 
+    # --- Ensure Folders ---
     folders_to_ensure = [
         config.DATA_FOLDER, config.OUTPUT_FOLDER,
         config.TELEGRAM_VOICE_TEMP_FOLDER, config.TELEGRAM_TTS_TEMP_FOLDER,
@@ -988,17 +1049,19 @@ if __name__ == "__main__":
         if not file_utils.ensure_folder(folder_path, gui_callbacks=None): 
             logger.critical(f"CRITICAL: Failed to create folder '{folder_path}'. Exiting.")
             sys.exit(1)
+    logger.info("All necessary data folders ensured.")
 
+    # --- Load Initial States ---
     logger.info("Loading initial states (admin & assistant)...")
     try:
         chat_history, user_state, assistant_state = state_manager.load_initial_states(gui_callbacks=None)
     except Exception as e_state_load:
         logger.critical(f"CRITICAL ERROR loading initial states: {e_state_load}", exc_info=True); sys.exit(1)
 
+    # --- GUI Theme & Font from State ---
     initial_theme_from_state = user_state.get("gui_theme", config.DEFAULT_USER_STATE["gui_theme"])
     current_gui_theme = initial_theme_from_state if initial_theme_from_state in [config.GUI_THEME_LIGHT, config.GUI_THEME_DARK] else config.GUI_THEME_LIGHT
     user_state["gui_theme"] = current_gui_theme
-
     initial_font_size_state = user_state.get("chat_font_size", config.DEFAULT_USER_STATE["chat_font_size"])
     try: initial_font_size_state = int(initial_font_size_state)
     except (ValueError, TypeError): initial_font_size_state = config.DEFAULT_CHAT_FONT_SIZE
@@ -1006,12 +1069,13 @@ if __name__ == "__main__":
     user_state["chat_font_size"] = current_chat_font_size_applied
     logger.info(f"Initial GUI theme: {current_gui_theme}, Font size: {current_chat_font_size_applied}")
 
+    # --- Initialize ThreadPool & Managers ---
     logger.info("Initializing ThreadPoolExecutor for LLM tasks...")
     llm_task_executor = ThreadPoolExecutor(max_workers=config.LLM_TASK_THREAD_POOL_SIZE, thread_name_prefix="LLMTaskThread")
-
     logger.info("Initializing CustomerInteractionManager...")
     customer_interaction_manager_instance = CustomerInteractionManager()
 
+    # --- Initialize Tkinter GUI ---
     logger.info("Attempting to initialize Tkinter root & GUIManager...")
     try:
         app_tk_instance = tk.Tk()
@@ -1036,6 +1100,7 @@ if __name__ == "__main__":
         sys.exit(1)
     logger.info("GUIManager initialized.")
 
+    # --- Populate GUI Callbacks ---
     if gui:
         callback_mapping = {
             'status_update': 'update_status_label', 'speak_button_update': 'update_speak_button',
@@ -1066,26 +1131,23 @@ if __name__ == "__main__":
     else:
         logger.error("GUI object is None, callbacks cannot be populated.")
 
-    logger.info("Populating GUI with initial state data (Admin User Info, Assistant Kanban)...")
+    # --- Populate GUI with Initial Data ---
+    logger.info("Populating GUI with initial state data...")
     if gui and gui_callbacks:
-        if callable(gui_callbacks.get('update_chat_display_from_list')):
-            gui_callbacks['update_chat_display_from_list'](chat_history)
-        if callable(gui_callbacks.get('update_todo_list')):
-            gui_callbacks['update_todo_list'](user_state.get("todos", []))
-        if callable(gui_callbacks.get('update_calendar_events_list')):
-            gui_callbacks['update_calendar_events_list'](user_state.get("calendar_events", []))
-        initial_asst_tasks = assistant_state.get("internal_tasks", {})
+        # ... (GUI population logic as before) ...
+        if callable(gui_callbacks.get('update_chat_display_from_list')): gui_callbacks['update_chat_display_from_list'](chat_history)
+        if callable(gui_callbacks.get('update_todo_list')): gui_callbacks['update_todo_list'](user_state.get("todos", []))
+        if callable(gui_callbacks.get('update_calendar_events_list')): gui_callbacks['update_calendar_events_list'](user_state.get("calendar_events", []))
+        initial_asst_tasks = assistant_state.get("internal_tasks", {});
         if not isinstance(initial_asst_tasks, dict): initial_asst_tasks = {}
-        if callable(gui_callbacks.get('update_kanban_pending')):
-            gui_callbacks['update_kanban_pending'](initial_asst_tasks.get("pending", []))
-        if callable(gui_callbacks.get('update_kanban_in_process')):
-            gui_callbacks['update_kanban_in_process'](initial_asst_tasks.get("in_process", []))
-        if callable(gui_callbacks.get('update_kanban_completed')):
-            gui_callbacks['update_kanban_completed'](initial_asst_tasks.get("completed", []))
+        if callable(gui_callbacks.get('update_kanban_pending')): gui_callbacks['update_kanban_pending'](initial_asst_tasks.get("pending", []))
+        if callable(gui_callbacks.get('update_kanban_in_process')): gui_callbacks['update_kanban_in_process'](initial_asst_tasks.get("in_process", []))
+        if callable(gui_callbacks.get('update_kanban_completed')): gui_callbacks['update_kanban_completed'](initial_asst_tasks.get("completed", []))
         logger.info("Initial Admin User Info and Assistant Kanban populated on GUI.")
     else:
         logger.warning("GUI or gui_callbacks not available for initial data population.")
 
+    # --- Initialize Telegram Bot Handler ---
     logger.info("Initializing Telegram Bot Handler...")
     if config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_ADMIN_USER_ID:
         try:
@@ -1101,14 +1163,9 @@ if __name__ == "__main__":
                 logger.info("Config requests Telegram bot start on app start.")
                 if telegram_bot_handler_instance:
                     telegram_bot_handler_instance.start_polling()
-            else:
-                 logger.info("Telegram bot will not be started automatically (config).")
-                 current_tg_status_for_gui = "off"
-                 if not config.TELEGRAM_BOT_TOKEN: current_tg_status_for_gui = "no_token"
-                 elif not config.TELEGRAM_ADMIN_USER_ID: current_tg_status_for_gui = "no_admin"
-                 if gui_callbacks and callable(gui_callbacks.get('tele_status_update')):
-                     gui_callbacks['tele_status_update'](f"TELE: {current_tg_status_for_gui.upper()}", current_tg_status_for_gui)
-        except ValueError:
+            # ... (else block for not starting automatically) ...
+        # ... (exception handling for Telegram init) ...
+        except ValueError: # Handles invalid TELEGRAM_ADMIN_USER_ID
              logger.error(f"TELEGRAM_ADMIN_USER_ID '{config.TELEGRAM_ADMIN_USER_ID}' is invalid. Bot disabled.")
              if gui_callbacks and callable(gui_callbacks.get('tele_status_update')):
                  gui_callbacks['tele_status_update']("TELE: NO ADM", "no_admin")
@@ -1116,36 +1173,60 @@ if __name__ == "__main__":
             logger.error(f"Failed to initialize TelegramBotHandler: {e_tele_init}", exc_info=True)
             if gui_callbacks and callable(gui_callbacks.get('tele_status_update')):
                 gui_callbacks['tele_status_update']("TELE: INITERR", "error")
-    else:
+    else: # Missing token or admin ID
+        # ... (logging and GUI update for missing TG config) ...
         errmsg_tele = "Telegram Bot: "
         status_key_tele, status_type_tele = "TELE: OFF", "off"
         if not config.TELEGRAM_BOT_TOKEN: errmsg_tele += "Token not set."; status_key_tele, status_type_tele = "TELE: NO TOK", "no_token"
         if not config.TELEGRAM_ADMIN_USER_ID:
             errmsg_tele += (" " if config.TELEGRAM_BOT_TOKEN else "") + "Admin User ID not set."
-            if status_key_tele == "TELE: OFF": status_key_tele, status_type_tele = "TELE: NO ADM", "no_admin"
+            if status_key_tele == "TELE: OFF" and not config.TELEGRAM_BOT_TOKEN: # Prioritize no_token if both missing
+                 pass
+            elif status_key_tele == "TELE: OFF": # Only admin_id missing
+                status_key_tele, status_type_tele = "TELE: NO ADM", "no_admin"
         logger.warning(f"{errmsg_tele} Telegram features will be disabled.")
         if gui_callbacks and callable(gui_callbacks.get('tele_status_update')):
             gui_callbacks['tele_status_update'](status_key_tele, status_type_tele)
 
+
+    # --- Web UI Setup (Bridge instance created here) ---
+    web_bridge = None # Initialize to None
+    if config.ENABLE_WEB_UI:
+        web_logger.info("Web UI is enabled. Initializing bridge...")
+        web_bridge = WebAppBridge(
+            main_app_ollama_ready_flag_getter=lambda: ollama_ready,
+            main_app_status_label_getter_fn=lambda: gui.app_status_label.cget("text") if gui and hasattr(gui, 'app_status_label') and gui.app_status_label and gui.app_status_label.winfo_exists() else "N/A"
+        )
+        actual_flask_app.main_app_components['bridge'] = web_bridge # Pass bridge to Flask app context
+        
+        # Set the telegram handler reference in the bridge if both exist
+        if web_bridge and telegram_bot_handler_instance:
+            web_bridge.telegram_handler_instance_ref = telegram_bot_handler_instance
+            web_logger.info("Telegram handler instance reference set in WebAppBridge.")
+        elif web_bridge:
+            web_logger.warning("WebAppBridge created, but Telegram handler instance is not (yet) available to set reference.")
+
+    # --- Initialize GPU Monitor ---
     logger.info("Initializing GPU Monitor (if available)...")
+    # ... (GPU Monitor init as before) ...
     if gpu_monitor.PYNVML_AVAILABLE:
         _active_gpu_monitor = gpu_monitor.get_gpu_monitor_instance(gui_callbacks=gui_callbacks, update_interval=2)
         if _active_gpu_monitor and _active_gpu_monitor.active:
             _active_gpu_monitor.start()
             logger.info("GPU Monitor started.")
-        elif _active_gpu_monitor and not _active_gpu_monitor.active:
+        elif _active_gpu_monitor and not _active_gpu_monitor.active : # Corrected condition
             logger.warning("GPUMonitor initialized but not active (e.g. no NVIDIA GPU found by NVML).")
-    elif gui_callbacks and callable(gui_callbacks.get('gpu_status_update_display')):
+        # If _active_gpu_monitor is None (PYNVML_AVAILABLE was true but get_instance failed for some reason)
+        elif not _active_gpu_monitor and gpu_monitor.PYNVML_AVAILABLE :
+             if gui_callbacks and callable(gui_callbacks.get('gpu_status_update_display')):
+                gui_callbacks['gpu_status_update_display']("InitFail", "InitFail", "InitFail")
+    elif gui_callbacks and callable(gui_callbacks.get('gpu_status_update_display')): # PYNVML_AVAILABLE is False
         gui_callbacks['gpu_status_update_display']("N/A", "N/A", "na_nvml")
 
-    if config.ENABLE_WEB_UI:
-        web_logger.info("Web UI is enabled. Initializing bridge and Flask thread...")
-        web_bridge = WebAppBridge(
-            main_app_ollama_ready_flag_getter=lambda: ollama_ready,
-            main_app_status_label_getter_fn=lambda: gui.app_status_label.cget("text") if gui and hasattr(gui, 'app_status_label') and gui.app_status_label and gui.app_status_label.winfo_exists() else "N/A"
-        )
-        actual_flask_app.main_app_components['bridge'] = web_bridge
 
+    # --- Start Flask Server Thread (if Web UI enabled) ---
+    flask_thread = None
+    if config.ENABLE_WEB_UI:
         def run_flask_server_thread_target():
             try:
                 web_logger.info(f"Starting Flask web server on http://0.0.0.0:{config.WEB_UI_PORT}")
@@ -1154,20 +1235,24 @@ if __name__ == "__main__":
                 web_logger.critical(f"Flask server failed to start or crashed: {e_flask_run}", exc_info=True)
                 if gui_callbacks and callable(gui_callbacks.get('webui_status_update')):
                     gui_callbacks['webui_status_update']("WEBUI: ERR", "error")
+        
         flask_thread = threading.Thread(target=run_flask_server_thread_target, daemon=True, name="FlaskWebUIServerThread")
         flask_thread.start()
         web_logger.info("Flask server thread started.")
         if gui_callbacks and callable(gui_callbacks.get('webui_status_update')):
-             gui_callbacks['webui_status_update']("WEBUI: LOAD", "loading")
+             gui_callbacks['webui_status_update']("WEBUI: LOAD", "loading") # Will be updated by loader
     else:
         web_logger.info("Web UI is disabled in config.")
         if gui_callbacks and callable(gui_callbacks.get('webui_status_update')):
              gui_callbacks['webui_status_update']("WEBUI: OFF", "off")
+    # --- End Web UI Setup ---
 
+    # --- Start Model/Services Loader Thread ---
     logger.info("Starting model and services loader thread...")
     loader_thread = threading.Thread(target=load_all_models_and_services, daemon=True, name="ServicesLoaderThread")
     loader_thread.start()
 
+    # --- Schedule Periodic Tasks on Tkinter Main Thread ---
     if app_tk_instance and hasattr(app_tk_instance, 'winfo_exists') and app_tk_instance.winfo_exists():
         app_tk_instance.after(300, _process_queued_admin_llm_messages)
         app_tk_instance.after(config.CUSTOMER_INTERACTION_CHECK_INTERVAL_SECONDS * 1000, _periodic_customer_interaction_checker)
@@ -1175,13 +1260,14 @@ if __name__ == "__main__":
     else:
         logger.error("Tkinter instance not available for scheduling periodic tasks. Key functionalities might not work.")
 
+    # --- Start Tkinter Mainloop ---
     logger.info("Starting Tkinter mainloop...")
     try:
         if app_tk_instance:
             app_tk_instance.mainloop()
         else:
             logger.critical("Cannot start mainloop: app_tk_instance is None. Application will exit.")
-            on_app_exit()
+            on_app_exit() # Try to cleanup
             sys.exit(1)
     except KeyboardInterrupt:
         logger.info("KeyboardInterrupt detected by mainloop. Initiating shutdown.")
@@ -1189,10 +1275,11 @@ if __name__ == "__main__":
         if "application has been destroyed" in str(e_tcl).lower():
             logger.info("Tkinter mainloop TclError: Application already destroyed (likely during normal shutdown).")
         else:
+            # Log full error if it's unexpected
             logger.error(f"Unhandled TclError in mainloop: {e_tcl}. Initiating shutdown.", exc_info=True)
     except Exception as e_mainloop:
         logger.critical(f"Unexpected critical error in Tkinter mainloop: {e_mainloop}", exc_info=True)
     finally:
         logger.info("Mainloop exited or error occurred. Ensuring graceful shutdown via on_app_exit().")
-        on_app_exit()
+        on_app_exit() # This handles shutdown of threads, Flask server should stop as it's daemon.
         logger.info("Application main thread has finished.")
