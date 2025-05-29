@@ -93,29 +93,25 @@ user_state: dict = {}
 assistant_state: dict = {}
 global_states_lock = threading.Lock()
 ollama_ready: bool = False
-# current_gui_theme and current_chat_font_size_applied are used to hold the GUI's actual applied state
-# They are updated when GUI applies them, and user_state dict is also updated to reflect this.
-current_gui_theme: str = config.GUI_THEME_LIGHT 
+current_gui_theme: str = config.GUI_THEME_LIGHT
 current_chat_font_size_applied: int = config.DEFAULT_CHAT_FONT_SIZE
 gui_callbacks: dict = {}
 
-# --- WebUI Control ---
-_web_ui_should_be_running = config.ENABLE_WEB_UI # Master flag based on config
-_web_ui_user_toggle_enabled = config.ENABLE_WEB_UI # User's preference via systray
+_web_ui_should_be_running = config.ENABLE_WEB_UI
+_web_ui_user_toggle_enabled = config.ENABLE_WEB_UI
 
 def set_web_ui_enabled_state(enable: bool):
-    """Sets the user's preference for WebUI and updates the web_app's internal flag."""
     global _web_ui_user_toggle_enabled
-    if not config.ENABLE_WEB_UI and enable: 
+    if not config.ENABLE_WEB_UI and enable:
         logger.warning("WebUI cannot be enabled as it's disabled in the main .env configuration.")
         if gui_callbacks and callable(gui_callbacks.get('webui_status_update')):
-            gui_callbacks['webui_status_update']("WEBUI: CFGOFF", "off") 
+            gui_callbacks['webui_status_update']("WEBUI: CFGOFF", "off")
         return
 
     _web_ui_user_toggle_enabled = enable
-    web_app_internal_enabled_flag_ref.set_enabled_status(enable) 
+    web_app_internal_enabled_flag_ref.set_enabled_status(enable)
     logger.info(f"WebUI user toggle set to: {'Enabled' if enable else 'Disabled'}")
-    
+
     if gui_callbacks and callable(gui_callbacks.get('webui_status_update')):
         if not config.ENABLE_WEB_UI:
             gui_callbacks['webui_status_update']("WEBUI: CFGOFF", "off")
@@ -129,18 +125,17 @@ def _enable_webui_action(): set_web_ui_enabled_state(True)
 def _disable_webui_action(): set_web_ui_enabled_state(False)
 
 def check_webui_health():
-    """Pings the Flask app's /health endpoint."""
     global _web_ui_user_toggle_enabled
     if not config.ENABLE_WEB_UI:
-        return "WEBUI: CFGOFF", "off" 
+        return "WEBUI: CFGOFF", "off"
     if not _web_ui_user_toggle_enabled:
-        return "WEBUI: PAUSED", "disabled" 
+        return "WEBUI: PAUSED", "disabled"
 
     if flask_thread_instance and flask_thread_instance.is_alive():
         try:
             response = requests.get(f"http://localhost:{config.WEB_UI_PORT}/health", timeout=2)
             if response.status_code == 200 and response.json().get("status") == "ok":
-                return "WEBUI: ON", "active" 
+                return "WEBUI: ON", "active"
             else:
                 return "WEBUI: UNHEALTHY", "error"
         except requests.ConnectionError:
@@ -150,40 +145,57 @@ def check_webui_health():
         except Exception as e:
             logger.warning(f"WebUI health check failed: {e}")
             return "WEBUI: ERR", "error"
-    return "WEBUI: OFF", "off" 
+    return "WEBUI: OFF", "off"
 
-
-# --- Callback Functions for Utility Modules ---
 def set_ollama_ready_main(is_ready: bool):
     global ollama_ready
     ollama_ready = is_ready
 
 def on_gui_recording_finished(recorded_sample_rate):
     global chat_history, user_state, assistant_state, global_states_lock, ollama_ready
-    process_gui_recorded_audio(
-        recorded_sample_rate=recorded_sample_rate,
-        chat_history_ref=chat_history, user_state_ref=user_state, assistant_state_ref=assistant_state,
-        global_states_lock_ref=global_states_lock, gui_callbacks=gui_callbacks,
-        telegram_bot_handler_instance_ref=telegram_bot_handler_instance,
-        ollama_ready_flag=ollama_ready, audio_processor_module_ref=audio_processor,
-        whisper_handler_module_ref=whisper_handler, tts_manager_module_ref=tts_manager,
-        ollama_handler_module_ref=ollama_handler, state_manager_module_ref=state_manager,
-        file_utils_module_ref=file_utils,
-        telegram_messaging_utils_module_ref=telegram_messaging_utils_module
-    )
-    if gui_callbacks and callable(gui_callbacks.get('speak_button_update')):
-        speak_btn_ready = whisper_handler.is_whisper_ready()
-        gui_callbacks['speak_button_update'](speak_btn_ready, "Speak" if speak_btn_ready else "HEAR NRDY")
+    global telegram_bot_handler_instance, audio_processor, whisper_handler, tts_manager
+    global ollama_handler, state_manager, file_utils, telegram_messaging_utils_module
+
+    try:
+        process_gui_recorded_audio(
+            recorded_sample_rate=recorded_sample_rate,
+            chat_history_ref=chat_history, user_state_ref=user_state, assistant_state_ref=assistant_state,
+            global_states_lock_ref=global_states_lock, gui_callbacks=gui_callbacks,
+            telegram_bot_handler_instance_ref=telegram_bot_handler_instance,
+            ollama_ready_flag=ollama_ready, audio_processor_module_ref=audio_processor,
+            whisper_handler_module_ref=whisper_handler, tts_manager_module_ref=tts_manager,
+            ollama_handler_module_ref=ollama_handler, state_manager_module_ref=state_manager,
+            file_utils_module_ref=file_utils,
+            telegram_messaging_utils_module_ref=telegram_messaging_utils_module
+        )
+    except Exception as e:
+        logger.critical(f"CRITICAL ERROR in on_gui_recording_finished (from process_gui_recorded_audio): {e}", exc_info=True)
+        error_message_short = str(e)[:100]
+        if gui_callbacks:
+            if callable(gui_callbacks.get('status_update')):
+                gui_callbacks['status_update'](f"Error after rec: {error_message_short}")
+            if callable(gui_callbacks.get('messagebox_error')):
+                gui_callbacks['messagebox_error']("Processing Error", f"A critical error occurred while processing audio: {e}")
+            if callable(gui_callbacks.get('act_status_update')):
+                gui_callbacks['act_status_update']("ACT: IDLE", "idle") # Reset ACT status
+            if callable(gui_callbacks.get('mind_status_update')): # Reset MIND status
+                mind_text = "MIND: RDY" if ollama_ready else "MIND: ERR-CHK" # Indicate ready or check error
+                mind_type = "ready" if ollama_ready else "error"
+                gui_callbacks['mind_status_update'](mind_text, mind_type)
+    finally:
+        # This ensures the speak button is always reset to a sensible state after recording attempt.
+        if gui_callbacks and callable(gui_callbacks.get('speak_button_update')):
+            speak_btn_ready = whisper_handler.is_whisper_ready()
+            gui_callbacks['speak_button_update'](speak_btn_ready, "Speak" if speak_btn_ready else "HEAR NRDY")
 
 
 def handle_web_admin_interaction_result(bridge_result_data: dict):
     global chat_history, user_state, assistant_state, global_states_lock, current_gui_theme, current_chat_font_size_applied
     logger.info(f"MAIN: Processing WebAppBridge result. Transcription: '{bridge_result_data.get('user_transcription', '')[:50]}...'")
 
-    # Snapshot of states BEFORE this interaction's modifications
     user_state_snapshot: dict
     assistant_state_snapshot: dict
-    with global_states_lock: # Take snapshot from live states
+    with global_states_lock:
         user_state_snapshot = user_state.copy()
         assistant_state_snapshot = assistant_state.copy()
 
@@ -194,19 +206,16 @@ def handle_web_admin_interaction_result(bridge_result_data: dict):
                 f"[Web UI Error: {bridge_result_data['error_message']}]", is_error=True, source="web_admin_error"
             )
 
-    # Process User State (Admin's state)
     llm_provided_user_state_changes = bridge_result_data.get("updated_user_state")
     if llm_provided_user_state_changes and isinstance(llm_provided_user_state_changes, dict):
-        # --- BEGIN Theme/Font handling (modifies llm_provided_user_state_changes IN PLACE) ---
-        # Uses main.py's current_gui_theme and current_chat_font_size_applied as the source of truth for current GUI state
         llm_theme_suggestion = llm_provided_user_state_changes.get("gui_theme", current_gui_theme)
-        applied_theme_value = current_gui_theme 
+        applied_theme_value = current_gui_theme
         if llm_theme_suggestion != current_gui_theme and llm_theme_suggestion in [config.GUI_THEME_LIGHT, config.GUI_THEME_DARK]:
             if gui and callable(gui_callbacks.get('apply_application_theme')):
                 gui_callbacks['apply_application_theme'](llm_theme_suggestion)
-                current_gui_theme = llm_theme_suggestion # Update main.py's global tracker
+                current_gui_theme = llm_theme_suggestion
                 applied_theme_value = llm_theme_suggestion
-        llm_provided_user_state_changes["gui_theme"] = applied_theme_value # Ensure state to be merged has applied theme
+        llm_provided_user_state_changes["gui_theme"] = applied_theme_value
 
         llm_font_size_str_suggestion = llm_provided_user_state_changes.get("chat_font_size", str(current_chat_font_size_applied))
         try: llm_font_size_as_int = int(llm_font_size_str_suggestion)
@@ -216,86 +225,64 @@ def handle_web_admin_interaction_result(bridge_result_data: dict):
         if clamped_font_size_suggestion != current_chat_font_size_applied:
             if gui and callable(gui_callbacks.get('apply_chat_font_size')):
                 gui_callbacks['apply_chat_font_size'](clamped_font_size_suggestion)
-                current_chat_font_size_applied = clamped_font_size_suggestion # Update main.py's global tracker
+                current_chat_font_size_applied = clamped_font_size_suggestion
             applied_font_size_value = clamped_font_size_suggestion
         llm_provided_user_state_changes["chat_font_size"] = applied_font_size_value
-        # --- END Theme/Font handling ---
 
-        with global_states_lock: # Lock for final update of live state
-            merged_user_state = user_state_snapshot.copy() # Start with pre-interaction state
-            merged_user_state.update(llm_provided_user_state_changes) # Overlay LLM's changes (now with correct GUI settings)
+        with global_states_lock:
+            merged_user_state = user_state_snapshot.copy()
+            merged_user_state.update(llm_provided_user_state_changes)
             user_state.clear(); user_state.update(merged_user_state)
     else:
         logger.warning("MAIN: WebAppBridge did not return a dictionary for updated_user_state. User state not modified by LLM this turn.")
 
-
-    # Process Assistant State
     llm_provided_assistant_state_changes = bridge_result_data.get("updated_assistant_state")
     if llm_provided_assistant_state_changes and isinstance(llm_provided_assistant_state_changes, dict):
-        with global_states_lock: # Lock for final update of live state
-            merged_assistant_state = assistant_state_snapshot.copy() # Start with pre-interaction state
-            
-            # Special merge for internal_tasks
+        with global_states_lock:
+            merged_assistant_state = assistant_state_snapshot.copy()
             if "internal_tasks" in llm_provided_assistant_state_changes and isinstance(llm_provided_assistant_state_changes["internal_tasks"], dict):
                 llm_tasks_dict = llm_provided_assistant_state_changes["internal_tasks"]
                 if "internal_tasks" not in merged_assistant_state or not isinstance(merged_assistant_state.get("internal_tasks"), dict):
                     merged_assistant_state["internal_tasks"] = {"pending": [], "in_process": [], "completed": []}
-                
                 for task_type in ["pending", "in_process", "completed"]:
                     if task_type not in merged_assistant_state["internal_tasks"] or not isinstance(merged_assistant_state["internal_tasks"][task_type], list):
                         merged_assistant_state["internal_tasks"][task_type] = []
-
                     new_tasks_from_llm = llm_tasks_dict.get(task_type, [])
                     if not isinstance(new_tasks_from_llm, list): new_tasks_from_llm = [str(new_tasks_from_llm)]
-                    
                     existing_tasks_in_merged = merged_assistant_state["internal_tasks"][task_type]
-                    
                     merged_assistant_state["internal_tasks"][task_type] = list(dict.fromkeys(
                         [str(t) for t in existing_tasks_in_merged] + [str(t) for t in new_tasks_from_llm]
                     ))
-
-            # Update other assistant state keys
             for key, val_llm in llm_provided_assistant_state_changes.items():
                 if key != "internal_tasks":
                     merged_assistant_state[key] = val_llm
-            
-            # `last_used_language` might be part of llm_provided_assistant_state_changes, if not, it's preserved from snapshot.
             assistant_state.clear(); assistant_state.update(merged_assistant_state)
     else:
         logger.warning("MAIN: WebAppBridge did not return a dictionary for updated_assistant_state. Assistant state not modified by LLM this turn.")
 
-    # Customer state update
     updated_customer_state_from_bridge = bridge_result_data.get("updated_active_customer_state")
     if updated_customer_state_from_bridge and isinstance(updated_customer_state_from_bridge, dict):
         cust_id_in_state = updated_customer_state_from_bridge.get("user_id")
-        if cust_id_in_state: # No lock needed, save_customer_state is file IO
+        if cust_id_in_state:
             if state_manager.save_customer_state(cust_id_in_state, updated_customer_state_from_bridge, gui_callbacks):
                 logger.info(f"MAIN: Updated state for context customer {cust_id_in_state} via web interaction.")
         else: logger.warning("MAIN: Web bridge returned customer state without user_id.")
 
-    # Chat history update
     new_chat_turn_from_bridge = bridge_result_data.get("new_chat_turn")
     if new_chat_turn_from_bridge and isinstance(new_chat_turn_from_bridge, dict):
-        with global_states_lock: # Lock for chat_history modification
+        with global_states_lock:
             new_chat_turn_from_bridge["timestamp"] = state_manager.get_current_timestamp_iso()
             chat_history.append(new_chat_turn_from_bridge)
-            # GUI update for chat will happen after save_states or via specific add_user/assistant message calls
 
-    # Save all states (this might trim chat_history) and update GUI lists
-    with global_states_lock: # Lock for save_states which reads these
+    with global_states_lock:
         updated_ch = state_manager.save_states(chat_history, user_state, assistant_state, gui_callbacks)
-        if len(chat_history) != len(updated_ch): chat_history[:] = updated_ch # Update local ref if trimmed
+        if len(chat_history) != len(updated_ch): chat_history[:] = updated_ch
 
-    # Update GUI from the new states
     if gui and gui_callbacks:
-        with global_states_lock: # Read states under lock for GUI update
-            # If new_chat_turn_from_bridge was added, it should be displayed.
-            # A full refresh handles trimming and ensures consistency.
+        with global_states_lock:
             if callable(gui_callbacks.get('update_chat_display_from_list')): gui_callbacks['update_chat_display_from_list'](chat_history)
-            
             if callable(gui_callbacks.get('update_todo_list')): gui_callbacks['update_todo_list'](user_state.get("todos", []))
             if callable(gui_callbacks.get('update_calendar_events_list')): gui_callbacks['update_calendar_events_list'](user_state.get("calendar_events", []))
-            
             asst_tasks_web = assistant_state.get("internal_tasks", {});
             if not isinstance(asst_tasks_web, dict): asst_tasks_web = {}
             if callable(gui_callbacks.get('update_kanban_pending')): gui_callbacks['update_kanban_pending'](asst_tasks_web.get("pending", []))
@@ -314,7 +301,7 @@ def toggle_speaking_recording():
             if gui_callbacks and callable(gui_callbacks.get('speak_button_update')):
                 gui_callbacks['speak_button_update'](True, "Listening...")
     else:
-        audio_processor.stop_recording()
+        audio_processor.stop_recording() # This will trigger on_gui_recording_finished
         if gui_callbacks and callable(gui_callbacks.get('speak_button_update')):
             gui_callbacks['speak_button_update'](False, "Processing...")
 
@@ -432,29 +419,27 @@ if __name__ == "__main__":
         config.WEB_UI_AUDIO_TEMP_FOLDER, config.WEB_UI_TTS_SERVE_FOLDER
     ]
     for folder_path in folders_to_ensure:
-        if not file_utils.ensure_folder(folder_path, gui_callbacks=None): # gui_callbacks not avail yet
+        if not file_utils.ensure_folder(folder_path, gui_callbacks=None):
             logger.critical(f"CRITICAL: Failed to create folder '{folder_path}'. Exiting.")
             sys.exit(1)
 
     logger.info("Loading initial states (admin & assistant)...")
     try:
-        loaded_ch, loaded_us, loaded_as = state_manager.load_initial_states(gui_callbacks=None) # gui_callbacks not avail yet
+        loaded_ch, loaded_us, loaded_as = state_manager.load_initial_states(gui_callbacks=None)
         with global_states_lock:
             chat_history = loaded_ch; user_state = loaded_us; assistant_state = loaded_as
     except Exception as e_state_load:
         logger.critical(f"CRITICAL ERROR loading initial states: {e_state_load}", exc_info=True); sys.exit(1)
 
-    with global_states_lock: # Initialize main.py's theme/font trackers from loaded state
+    with global_states_lock:
         initial_theme_from_state = user_state.get("gui_theme", config.DEFAULT_USER_STATE["gui_theme"])
         current_gui_theme = initial_theme_from_state if initial_theme_from_state in [config.GUI_THEME_LIGHT, config.GUI_THEME_DARK] else config.GUI_THEME_LIGHT
-        user_state["gui_theme"] = current_gui_theme # Ensure loaded user_state also has this consistent value
-        
+        user_state["gui_theme"] = current_gui_theme
         initial_font_size_state = user_state.get("chat_font_size", config.DEFAULT_USER_STATE["chat_font_size"])
         try: initial_font_size_state = int(initial_font_size_state)
         except (ValueError, TypeError): initial_font_size_state = config.DEFAULT_CHAT_FONT_SIZE
         current_chat_font_size_applied = max(config.MIN_CHAT_FONT_SIZE, min(initial_font_size_state, config.MAX_CHAT_FONT_SIZE))
-        user_state["chat_font_size"] = current_chat_font_size_applied # Ensure loaded user_state has this
-
+        user_state["chat_font_size"] = current_chat_font_size_applied
 
     logger.info("Initializing ThreadPoolExecutor for LLM tasks...")
     llm_task_executor = ThreadPoolExecutor(max_workers=config.LLM_TASK_THREAD_POOL_SIZE, thread_name_prefix="LLMTaskThread")
@@ -475,8 +460,8 @@ if __name__ == "__main__":
     }
     try:
         gui = GUIManager(app_tk_instance, action_callbacks_for_gui,
-                         initial_theme=current_gui_theme, # Pass main.py's tracker
-                         initial_font_size=current_chat_font_size_applied) # Pass main.py's tracker
+                         initial_theme=current_gui_theme,
+                         initial_font_size=current_chat_font_size_applied)
     except Exception as e_gui:
         logger.critical(f"CRITICAL GUIManager init: {e_gui}", exc_info=True)
         if app_tk_instance :
@@ -511,8 +496,8 @@ if __name__ == "__main__":
     else: logger.error("GUI object is None, callbacks cannot be populated.")
 
     logger.info("Populating GUI with initial state data...")
-    if gui and gui_callbacks: # Should always be true if startup succeeded
-        with global_states_lock: # Read states under lock for GUI update
+    if gui and gui_callbacks:
+        with global_states_lock:
             if callable(gui_callbacks.get('update_chat_display_from_list')): gui_callbacks['update_chat_display_from_list'](chat_history)
             if callable(gui_callbacks.get('update_todo_list')): gui_callbacks['update_todo_list'](user_state.get("todos", []))
             if callable(gui_callbacks.get('update_calendar_events_list')): gui_callbacks['update_calendar_events_list'](user_state.get("calendar_events", []))
@@ -540,7 +525,7 @@ if __name__ == "__main__":
             )
             if config.START_BOT_ON_APP_START and telegram_bot_handler_instance:
                 telegram_bot_handler_instance.start_polling()
-        except ValueError: # From invalid TELEGRAM_ADMIN_USER_ID
+        except ValueError:
              logger.error(f"TELEGRAM_ADMIN_USER_ID '{config.TELEGRAM_ADMIN_USER_ID}' is invalid. Bot disabled.")
              if gui_callbacks and callable(gui_callbacks.get('tele_status_update')): gui_callbacks['tele_status_update']("TELE: NO ADM", "no_admin")
         except Exception as e_tele_init:
@@ -564,22 +549,19 @@ if __name__ == "__main__":
             whisper_handler_module=whisper_handler, ollama_handler_module=ollama_handler,
             tts_manager_module=tts_manager, _whisper_module_for_load_audio_ref=_whisper_module_for_load_audio,
             state_manager_module_ref=state_manager, gui_callbacks_ref=gui_callbacks,
-            fn_check_webui_health_main=check_webui_health 
+            fn_check_webui_health_main=check_webui_health
         )
         actual_flask_app.main_app_components['bridge'] = web_bridge_instance
         actual_flask_app.main_app_components['main_interaction_handler'] = handle_web_admin_interaction_result
-        # Pass direct references for WebApp to read states (under its own lock management if necessary, or reads from main's lock)
         actual_flask_app.main_app_components['chat_history_ref'] = chat_history
         actual_flask_app.main_app_components['user_state_ref'] = user_state
         actual_flask_app.main_app_components['assistant_state_ref'] = assistant_state
         actual_flask_app.main_app_components['global_lock_ref'] = global_states_lock
-        
         web_app_internal_enabled_flag_ref.set_enabled_status(_web_ui_user_toggle_enabled)
-
 
         if web_bridge_instance and telegram_bot_handler_instance:
             web_bridge_instance.telegram_handler_instance_ref = telegram_bot_handler_instance
-        
+
         def run_flask_server_thread_target():
             try:
                 web_logger.info(f"Attempting to start Flask web server on http://0.0.0.0:{config.WEB_UI_PORT}")
@@ -589,7 +571,7 @@ if __name__ == "__main__":
                 web_logger.critical(f"Flask server CRASHED or failed to start: {e_flask_run}", exc_info=True)
                 if gui_callbacks and callable(gui_callbacks.get('webui_status_update')):
                     gui_callbacks['webui_status_update']("WEBUI: ERR", "error")
-        
+
         flask_thread_instance = threading.Thread(target=run_flask_server_thread_target, daemon=True, name="FlaskWebUIServerThread")
         flask_thread_instance.start()
     else:
@@ -609,14 +591,14 @@ if __name__ == "__main__":
         target=load_services_util,
         args=(gui_callbacks, assistant_state, chat_history, telegram_bot_handler_instance,
               set_ollama_ready_main, whisper_handler, tts_manager, ollama_handler, state_manager,
-              global_states_lock), # Pass assistant_state, chat_history for loader to use
+              global_states_lock),
         daemon=True, name="ServicesLoaderThread"
     )
     loader_thread.start()
 
     if app_tk_instance and hasattr(app_tk_instance, 'winfo_exists') and app_tk_instance.winfo_exists():
         app_tk_instance.after(300, _process_queued_admin_llm_messages)
-        app_tk_instance.after(1000, _periodic_status_and_task_checker) 
+        app_tk_instance.after(1000, _periodic_status_and_task_checker)
     else: logger.error("Tkinter instance not available for scheduling periodic tasks.")
 
     logger.info("Starting Tkinter mainloop...")

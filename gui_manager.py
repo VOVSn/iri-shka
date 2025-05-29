@@ -39,7 +39,6 @@ WEBUI_STATUS_CHECK_AVAILABLE = False # For systray check
 try:
     from utils import tts_manager, whisper_handler
     from utils import telegram_handler as app_telegram_handler_module # Alias for clarity
-    # Import web_app module to access its WEB_UI_ENABLED_FLAG for systray status
     from webui import web_app as web_app_module
 
     MODEL_STATUS_CHECK_AVAILABLE = True
@@ -51,14 +50,14 @@ try:
 except ImportError as e:
     if 'tts_manager' in str(e) or 'whisper_handler' in str(e): MODEL_STATUS_CHECK_AVAILABLE = False
     if 'telegram_handler' in str(e): TELEGRAM_STATUS_CHECK_AVAILABLE = False
-    if 'web_app' in str(e): WEBUI_STATUS_CHECK_AVAILABLE = False # Could not import web_app at all
+    if 'web_app' in str(e): WEBUI_STATUS_CHECK_AVAILABLE = False
     logger.warning(f"Could not import one or more modules (tts, whisper, telegram, web_app) for tray status: {e}")
 
 
 class GUIManager:
     def __init__(self, root_tk_instance, action_callbacks, initial_theme=config.GUI_THEME_LIGHT, initial_font_size=config.DEFAULT_CHAT_FONT_SIZE):
         self.app_window = root_tk_instance
-        self.action_callbacks = action_callbacks # Will include webui_toggle_enabled
+        self.action_callbacks = action_callbacks
         self.current_theme = initial_theme
         self.current_chat_font_size = initial_font_size
         logger.info(f"GUIManager initialized with theme: {self.current_theme}, font size: {self.current_chat_font_size}.")
@@ -92,15 +91,12 @@ class GUIManager:
         self.tray_icon = None
         self.tray_thread = None
 
-        # Icon path calculation, assuming gui_manager.py is in the project root
-        # __file__ will be C:\Code\TTS\python_tts_test\gui_manager.py
-        # os.path.dirname(__file__) will be C:\Code\TTS\python_tts_test
         current_script_directory = os.path.dirname(os.path.realpath(__file__))
         self.icon_path = os.path.join(current_script_directory, 'icon.ico')
-        
+
         if not os.path.exists(self.icon_path):
             logger.error(f"icon.ico not found at expected location: {self.icon_path}. Tray icon will not be created.")
-            self.icon_path = None # Explicitly set to None if not found
+            self.icon_path = None
         else:
             logger.info(f"GUIManager icon path successfully found: {self.icon_path}")
 
@@ -129,7 +125,7 @@ class GUIManager:
         self._setup_widgets()
         self._configure_tags_for_chat_display()
         self._setup_protocol_handlers()
-        if self.icon_path: # Only setup tray if icon exists
+        if self.icon_path:
             self._setup_tray_icon()
         else:
             logger.warning("Skipping system tray icon setup as icon file was not found.")
@@ -297,10 +293,10 @@ class GUIManager:
             else:
                 def get_event_time_for_day_sort(event_dict):
                     time_str = event_dict.get("time")
-                    if time_str: 
+                    if time_str:
                         try: return datetime.strptime(time_str, "%H:%M").time()
-                        except ValueError: logger.warning(f"Invalid time string '{time_str}' for event '{event_dict.get('description', 'N/A')}' on {self.selected_calendar_date}, sorting as if no time."); return datetime.max.time() 
-                    return datetime.max.time() 
+                        except ValueError: logger.warning(f"Invalid time string '{time_str}' for event '{event_dict.get('description', 'N/A')}' on {self.selected_calendar_date}, sorting as if no time."); return datetime.max.time()
+                    return datetime.max.time()
                 sorted_day_events = sorted(events_today, key=get_event_time_for_day_sort)
                 for ev in sorted_day_events: desc = ev.get('description', ev.get('name', 'Event')); time_prefix = f"{ev.get('time')}: " if ev.get('time') else ""; self.calendar_events_display.insert(tk.END, f"{time_prefix}{desc}\n")
         self.calendar_events_display.config(state=tk.DISABLED); self.calendar_events_display.see(tk.END)
@@ -321,9 +317,18 @@ class GUIManager:
 
     def _handle_space_key_press(self, event=None):
         try:
-            if isinstance(self.app_window.focus_get(), (tk.Entry, scrolledtext.ScrolledText, tk.Text)): return
-        except: pass
-        if 'toggle_speaking_recording' in self.action_callbacks: self.action_callbacks['toggle_speaking_recording']()
+            focused_widget = self.app_window.focus_get()
+            if isinstance(focused_widget, (tk.Entry, scrolledtext.ScrolledText, tk.Text)):
+                logger.debug("Space press ignored, focus is on an input widget.")
+                return # Do not toggle recording
+        except tk.TclError as e:
+            logger.debug(f"TclError getting focused widget (e.g., window not focused): {e}. Allowing space toggle.")
+        except Exception as e_focus:
+            logger.warning(f"Unexpected error checking focus for space key: {e_focus}. Allowing space toggle.", exc_info=True)
+
+        if 'toggle_speaking_recording' in self.action_callbacks:
+            logger.debug("Space press: Calling toggle_speaking_recording.")
+            self.action_callbacks['toggle_speaking_recording']()
         return "break"
 
     def _on_close_button_override(self):
@@ -335,7 +340,6 @@ class GUIManager:
             self.app_window.bind_all("<KeyRelease-space>", self._handle_space_key_press, add="+")
 
     def _setup_tray_icon(self):
-        # This check is now redundant if __init__ handles it, but keep for safety
         if not PYSTRAY_AVAILABLE or not self.app_window or not self.icon_path or not os.path.exists(self.icon_path):
             logger.warning("Cannot setup tray icon: pystray/icon missing or window not ready.")
             return
@@ -343,7 +347,7 @@ class GUIManager:
             image = Image.open(self.icon_path)
         except Exception as e:
             logger.error(f"Error loading tray icon image from '{self.icon_path}': {e}")
-            return # Do not proceed if image can't be loaded
+            return
         menu_items = [
             pystray.MenuItem('Show / Hide App', self._toggle_window_visibility, default=True),
             pystray.MenuItem('Models', pystray.Menu(pystray.MenuItem('Unload Bark TTS', self._on_tray_unload_bark, enabled=self._is_bark_loaded_for_tray), pystray.MenuItem('Reload Bark TTS', self._on_tray_reload_bark, enabled=self._can_reload_bark_for_tray), pystray.Menu.SEPARATOR, pystray.MenuItem('Unload Whisper STT', self._on_tray_unload_whisper, enabled=self._is_whisper_loaded_for_tray), pystray.MenuItem('Reload Whisper STT', self._on_tray_reload_whisper, enabled=self._can_reload_whisper_for_tray))),
@@ -426,9 +430,9 @@ class GUIManager:
     def _update_scrolled_text_list_internal(self, text_widget, items_list, empty_message="Nothing here.", item_prefix="- "):
         if not text_widget or not text_widget.winfo_exists(): return
         widget_name_for_log = "UnknownScrolledText"
-        try: widget_name_for_log = str(text_widget) # Get a string representation for logging
+        try: widget_name_for_log = str(text_widget)
         except: pass
-        
+
         try:
             text_widget.config(state=tk.NORMAL); text_widget.delete(1.0, tk.END)
             if not items_list or not isinstance(items_list, list):
@@ -442,13 +446,13 @@ class GUIManager:
         except Exception as e: text_widget_name_attr = getattr(text_widget, 'name', None); text_widget_name_val = text_widget_name_attr if text_widget_name_attr else widget_name_for_log; logger.error(f"Unexpected error updating scrolled text list widget '{text_widget_name_val}': {e}", exc_info=True)
 
 
-    def update_kanban_pending(self, tasks_list): 
+    def update_kanban_pending(self, tasks_list):
         logger.debug(f"GUIManager.update_kanban_pending called with tasks: {tasks_list}")
         self._safe_ui_update(lambda: self._update_scrolled_text_list_internal(self.kanban_pending_display, tasks_list, "No pending tasks."))
-    def update_kanban_in_process(self, tasks_list): 
+    def update_kanban_in_process(self, tasks_list):
         logger.debug(f"GUIManager.update_kanban_in_process called with tasks: {tasks_list}")
         self._safe_ui_update(lambda: self._update_scrolled_text_list_internal(self.kanban_in_process_display, tasks_list, "No tasks in process."))
-    def update_kanban_completed(self, tasks_list): 
+    def update_kanban_completed(self, tasks_list):
         logger.debug(f"GUIManager.update_kanban_completed called with tasks: {tasks_list}")
         self._safe_ui_update(lambda: self._update_scrolled_text_list_internal(self.kanban_finished_display, tasks_list, "No completed tasks."))
     def update_vis_status(self, short_text, status_type_str): self._safe_ui_update(lambda: self._update_component_status_widget_internal(self.vis_status_frame, self.vis_status_text_label, short_text, status_type_str))
@@ -522,7 +526,7 @@ class GUIManager:
         self._safe_ui_update(_update)
 
     def update_todo_list(self, todos):
-        if not self.todo_list_display: 
+        if not self.todo_list_display:
             logger.warning("GUIManager.update_todo_list called but self.todo_list_display is None.")
             return
         logger.debug(f"GUIManager.update_todo_list called with todos: {todos} (type: {type(todos)})")
