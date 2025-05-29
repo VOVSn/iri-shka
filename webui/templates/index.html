@@ -3,43 +3,64 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Iri-shka Web UI</title>
+    <title>Irishka AI Intercom</title>
+    <!-- Link to your existing style.css which will be modified -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-    <div class="container">
-        <h1>Iri-shka AI Assistant (Web)</h1>
+    <div class="intercom-unit">
+        <div class="brand-label">IRISHKA AI</div> <!-- Changed Brand -->
+        <div class="led-indicator" id="recordingLedIndicator"></div> <!-- For recording status -->
         
-        <button id="recordButton">Start Recording</button>
+        <div class="speaker-grille">
+            <!-- Speaker holes remain the same -->
+            <div class="speaker-hole"></div><div class="speaker-hole"></div><div class="speaker-hole"></div>
+            <div class="speaker-hole"></div><div class="speaker-hole"></div><div class="speaker-hole"></div>
+            <div class="speaker-hole"></div><div class="speaker-hole"></div><div class="speaker-hole"></div>
+            <div class="speaker-hole"></div><div class="speaker-hole"></div><div class="speaker-hole"></div>
+            <div class="speaker-hole"></div><div class="speaker-hole"></div><div class="speaker-hole"></div>
+        </div>
         
-        <h2>Conversation</h2>
-        <div class="chat-area" id="chatDisplay">
-            <p class="system-message">Click "Start Recording" to speak.</p>
+        <div class="screen-container">
+            <div class="screen" id="chatScreen"> <!-- Renamed for clarity -->
+                <div>SYSTEM BOOTING...</div>
+                <div><span class="cursor"></span></div>
+            </div>
+        </div>
+        
+        <div class="controls-section">
+            <button class="speak-button" id="recordButton"> <!-- Was speakButton, now recordButton -->
+                SPEAK
+            </button>
+            
+            <button class="play-button" id="playIrishkaButton" disabled> <!-- Was playButton, now playIrishkaButton, disabled initially -->
+                <div class="play-icon" id="playIrishkaIcon"></div>
+            </button>
         </div>
 
-        <audio id="audioPlayback" controls></audio>
-
-        <h2>System Status</h2>
-        <div class="status-area">
-            <!-- WebUI status is removed from here, implied by page loading -->
-            <div class="status-item">
-                <span class="status-label">Ollama (Mind):</span>
-                <span id="ollamaStatus" class="status-value status-info">Checking...</span>
+        <!-- Hidden Audio Element for Playback -->
+        <audio id="irishkaAudioPlayback" style="display: none;"></audio>
+        
+        <div class="status-led-panel">
+            <div class="status-led-group">
+                <div class="status-led" id="ollamaLed"></div>
+                <span class="led-label">OLLAMA</span>
             </div>
-            <div class="status-item">
-                <span class="status-label">Whisper (Hear):</span>
-                <span id="whisperStatus" class="status-value status-info">Checking...</span>
+            <div class="status-led-group">
+                <div class="status-led" id="whisperLed"></div>
+                <span class="led-label">WHISPER</span>
             </div>
-            <div class="status-item">
-                <span class="status-label">Bark (Voice):</span>
-                <span id="barkStatus" class="status-value status-info">Checking...</span>
+            <div class="status-led-group">
+                <div class="status-led" id="barkLed"></div>
+                <span class="led-label">BARK</span>
             </div>
-            <div class="status-item"> <!-- This was WebUI, now Telegram -->
-                <span class="status-label">Telegram Bot:</span>
-                <span id="telegramStatus" class="status-value status-info">Checking...</span>
+            <div class="status-led-group">
+                <div class="status-led" id="telegramLed"></div>
+                <span class="led-label">TELEGRAM</span>
             </div>
-            <div id="appStatus">Status: Initializing...</div>
         </div>
+        
+        <div class="app-status-text" id="appStatusText">STANDBY</div> <!-- Was statusText, now appStatusText -->
     </div>
 
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
