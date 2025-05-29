@@ -425,18 +425,32 @@ class GUIManager:
 
     def _update_scrolled_text_list_internal(self, text_widget, items_list, empty_message="Nothing here.", item_prefix="- "):
         if not text_widget or not text_widget.winfo_exists(): return
+        widget_name_for_log = "UnknownScrolledText"
+        try: widget_name_for_log = str(text_widget) # Get a string representation for logging
+        except: pass
+        
         try:
             text_widget.config(state=tk.NORMAL); text_widget.delete(1.0, tk.END)
-            if not items_list or not isinstance(items_list, list): text_widget.insert(tk.END, empty_message if not items_list else "Invalid data for list.")
+            if not items_list or not isinstance(items_list, list):
+                logger.debug(f"GUIManager._update_scrolled_text_list_internal ({widget_name_for_log}): Displaying empty_message ('{empty_message}'). Items_list type: {type(items_list)}, Value: {items_list}")
+                text_widget.insert(tk.END, empty_message if not items_list else "Invalid data for list.")
             else:
+                logger.debug(f"GUIManager._update_scrolled_text_list_internal ({widget_name_for_log}): Displaying {len(items_list)} items. First item (if any): {items_list[0] if items_list else 'N/A'}")
                 for item in items_list: text_widget.insert(tk.END, f"{item_prefix}{str(item)}\n")
             text_widget.config(state=tk.DISABLED); text_widget.see(tk.END)
-        except tk.TclError as e: text_widget_name_attr = getattr(text_widget, 'name', None); text_widget_name_val = text_widget_name_attr if text_widget_name_attr else 'Unnamed'; logger.error(f"Error updating scrolled text list widget '{text_widget_name_val}': {e}", exc_info=True)
-        except Exception as e: text_widget_name_attr = getattr(text_widget, 'name', None); text_widget_name_val = text_widget_name_attr if text_widget_name_attr else 'Unnamed'; logger.error(f"Unexpected error updating scrolled text list widget '{text_widget_name_val}': {e}", exc_info=True)
+        except tk.TclError as e: text_widget_name_attr = getattr(text_widget, 'name', None); text_widget_name_val = text_widget_name_attr if text_widget_name_attr else widget_name_for_log; logger.error(f"Error updating scrolled text list widget '{text_widget_name_val}': {e}", exc_info=True)
+        except Exception as e: text_widget_name_attr = getattr(text_widget, 'name', None); text_widget_name_val = text_widget_name_attr if text_widget_name_attr else widget_name_for_log; logger.error(f"Unexpected error updating scrolled text list widget '{text_widget_name_val}': {e}", exc_info=True)
 
-    def update_kanban_pending(self, tasks_list): logger.debug(f"Updating Kanban Pending tasks: {tasks_list}"); self._safe_ui_update(lambda: self._update_scrolled_text_list_internal(self.kanban_pending_display, tasks_list, "No pending tasks."))
-    def update_kanban_in_process(self, tasks_list): logger.debug(f"Updating Kanban In Process tasks: {tasks_list}"); self._safe_ui_update(lambda: self._update_scrolled_text_list_internal(self.kanban_in_process_display, tasks_list, "No tasks in process."))
-    def update_kanban_completed(self, tasks_list): logger.debug(f"Updating Kanban Finished/Completed tasks: {tasks_list}"); self._safe_ui_update(lambda: self._update_scrolled_text_list_internal(self.kanban_finished_display, tasks_list, "No completed tasks."))
+
+    def update_kanban_pending(self, tasks_list): 
+        logger.debug(f"GUIManager.update_kanban_pending called with tasks: {tasks_list}")
+        self._safe_ui_update(lambda: self._update_scrolled_text_list_internal(self.kanban_pending_display, tasks_list, "No pending tasks."))
+    def update_kanban_in_process(self, tasks_list): 
+        logger.debug(f"GUIManager.update_kanban_in_process called with tasks: {tasks_list}")
+        self._safe_ui_update(lambda: self._update_scrolled_text_list_internal(self.kanban_in_process_display, tasks_list, "No tasks in process."))
+    def update_kanban_completed(self, tasks_list): 
+        logger.debug(f"GUIManager.update_kanban_completed called with tasks: {tasks_list}")
+        self._safe_ui_update(lambda: self._update_scrolled_text_list_internal(self.kanban_finished_display, tasks_list, "No completed tasks."))
     def update_vis_status(self, short_text, status_type_str): self._safe_ui_update(lambda: self._update_component_status_widget_internal(self.vis_status_frame, self.vis_status_text_label, short_text, status_type_str))
     def update_art_status(self, short_text, status_type_str): self._safe_ui_update(lambda: self._update_component_status_widget_internal(self.art_status_frame, self.art_status_text_label, short_text, status_type_str))
 
@@ -508,7 +522,12 @@ class GUIManager:
         self._safe_ui_update(_update)
 
     def update_todo_list(self, todos):
-        if not self.todo_list_display: return; logger.debug(f"Updating Todo list: {todos}"); self._safe_ui_update(lambda: self._update_scrolled_text_list_internal(self.todo_list_display, todos, "No todos."))
+        if not self.todo_list_display: 
+            logger.warning("GUIManager.update_todo_list called but self.todo_list_display is None.")
+            return
+        logger.debug(f"GUIManager.update_todo_list called with todos: {todos} (type: {type(todos)})")
+        self._safe_ui_update(lambda: self._update_scrolled_text_list_internal(self.todo_list_display, todos, "No todos."))
+
     def update_calendar_events_list(self, all_events_data):
         logger.debug(f"GUIManager.update_calendar_events_list called with: {all_events_data}")
         if not isinstance(all_events_data, list): logger.warning(f"GUIManager.update_calendar_events_list received non-list data: {type(all_events_data)}"); self.all_calendar_events_data = []
