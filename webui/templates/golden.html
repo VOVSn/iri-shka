@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iri-shka PTT Intercom</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #d4af37, #f4d03f, #d4af37);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Orbitron', monospace;
+            padding: 20px;
+        }
+        
+        .intercom-container {
+            width: 400px;
+            height: 600px;
+            background: linear-gradient(145deg, #e6c547, #c7a82b);
+            border-radius: 30px;
+            box-shadow: 
+                20px 20px 40px rgba(180, 140, 20, 0.3),
+                -20px -20px 40px rgba(255, 220, 120, 0.7),
+                inset 5px 5px 10px rgba(255, 220, 120, 0.2),
+                inset -5px -5px 10px rgba(180, 140, 20, 0.2);
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+        }
+        
+        .title {
+            color: #8b4513;
+            font-size: 18px;
+            font-weight: 900;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .speaker {
+            width: 80px;
+            height: 20px;
+            background: linear-gradient(145deg, #2c2c2c, #1a1a1a);
+            border-radius: 10px;
+            box-shadow: 
+                inset 3px 3px 6px rgba(0,0,0,0.8),
+                inset -3px -3px 6px rgba(80,80,80,0.3);
+            position: relative;
+            margin-bottom: 10px;
+        }
+        
+        .speaker::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 60px;
+            height: 2px;
+            background: repeating-linear-gradient(
+                90deg,
+                #666 0px,
+                #666 3px,
+                transparent 3px,
+                transparent 6px
+            );
+        }
+        
+        .status-led {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: radial-gradient(circle, #ff4444, #cc0000);
+            box-shadow: 
+                0 0 10px rgba(255, 68, 68, 0.8),
+                inset 2px 2px 4px rgba(255, 100, 100, 0.3);
+            margin-bottom: 15px;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        
+        .lcd-display {
+            width: 100%;
+            height: 200px;
+            background: linear-gradient(145deg, #1a2b1a, #0f1f0f);
+            border-radius: 15px;
+            box-shadow: 
+                inset 8px 8px 16px rgba(0,0,0,0.8),
+                inset -8px -8px 16px rgba(50,70,50,0.2);
+            padding: 15px;
+            margin-bottom: 25px;
+            border: 3px solid #2d4a2d;
+        }
+        
+        .chat-area {
+            height: 100%;
+            overflow-y: auto;
+            color: #00ff00;
+            font-size: 12px;
+            line-height: 1.4;
+            text-shadow: 0 0 5px rgba(0, 255, 0, 0.5);
+        }
+        
+        .chat-message {
+            margin-bottom: 8px;
+            padding: 4px 8px;
+            border-radius: 8px;
+            animation: fadeIn 0.5s ease-in;
+        }
+        
+        .user-message {
+            background: rgba(0, 100, 0, 0.2);
+            text-align: right;
+            border: 1px solid rgba(0, 255, 0, 0.3);
+        }
+        
+        .assistant-message {
+            background: rgba(0, 150, 0, 0.2);
+            text-align: left;
+            border: 1px solid rgba(0, 255, 0, 0.3);
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .controls {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+        
+        .ptt-button {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            background: linear-gradient(145deg, #e6c547, #c7a82b);
+            box-shadow: 
+                15px 15px 30px rgba(180, 140, 20, 0.4),
+                -15px -15px 30px rgba(255, 220, 120, 0.8);
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Orbitron', monospace;
+            font-weight: 700;
+            font-size: 14px;
+            color: #8b4513;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+            transition: all 0.1s ease;
+            position: relative;
+        }
+        
+        .ptt-button:active {
+            box-shadow: 
+                5px 5px 15px rgba(180, 140, 20, 0.4),
+                -5px -5px 15px rgba(255, 220, 120, 0.8),
+                inset 8px 8px 16px rgba(180, 140, 20, 0.3),
+                inset -8px -8px 16px rgba(255, 220, 120, 0.2);
+            transform: scale(0.98);
+        }
+        
+        .ptt-button.recording {
+            background: linear-gradient(145deg, #ff6b6b, #cc5555);
+            animation: recordPulse 0.8s infinite;
+        }
+        
+        @keyframes recordPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        .play-button {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: linear-gradient(145deg, #e6c547, #c7a82b);
+            box-shadow: 
+                8px 8px 16px rgba(180, 140, 20, 0.4),
+                -8px -8px 16px rgba(255, 220, 120, 0.8);
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #8b4513;
+            font-size: 16px;
+            transition: all 0.1s ease;
+        }
+        
+        .play-button:active {
+            box-shadow: 
+                3px 3px 8px rgba(180, 140, 20, 0.4),
+                -3px -3px 8px rgba(255, 220, 120, 0.8),
+                inset 4px 4px 8px rgba(180, 140, 20, 0.3);
+            transform: scale(0.95);
+        }
+        
+        .status-leds {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .led-indicator {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .led {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: linear-gradient(145deg, #333, #1a1a1a);
+            box-shadow: 
+                inset 2px 2px 4px rgba(0,0,0,0.8),
+                2px 2px 6px rgba(0,0,0,0.3);
+            transition: all 0.3s ease;
+        }
+        
+        .led.active {
+            background: radial-gradient(circle, #00ff00, #00cc00);
+            box-shadow: 
+                0 0 15px rgba(0, 255, 0, 0.8),
+                inset 1px 1px 2px rgba(100, 255, 100, 0.3);
+        }
+        
+        .led-label {
+            font-size: 10px;
+            color: #8b4513;
+            font-weight: 700;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+        }
+        
+        .chat-area::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .chat-area::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 3px;
+        }
+        
+        .chat-area::-webkit-scrollbar-thumb {
+            background: rgba(0, 255, 0, 0.5);
+            border-radius: 3px;
+        }
+        
+        .typing-indicator {
+            color: #00ff00;
+            font-style: italic;
+            opacity: 0.7;
+        }
+        
+        .typing-dots::after {
+            content: '';
+            animation: typingDots 1.5s infinite;
+        }
+        
+        @keyframes typingDots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60%, 100% { content: '...'; }
+        }
+    </style>
+</head>
+<body>
+    <div class="intercom-container">
+        <div class="title">IRI-SHKA PTT</div>
+        
+        <div class="speaker"></div>
+        <div class="status-led"></div>
+        
+        <div class="lcd-display">
+            <div class="chat-area" id="chatArea">
+                <div class="chat-message assistant-message">
+                    <strong>Iri-shka:</strong> Hello! I'm your business assistant. Press and hold PTT to speak.
+                </div>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button class="ptt-button" id="pttButton">
+                PTT<br>SPEAK
+            </button>
+            <button class="play-button" id="playButton">
+                ▶
+            </button>
+        </div>
+        
+        <div class="status-leds">
+            <div class="led-indicator">
+                <div class="led" id="llmLed"></div>
+                <div class="led-label">LLM</div>
+            </div>
+            <div class="led-indicator">
+                <div class="led" id="hearLed"></div>
+                <div class="led-label">HEAR</div>
+            </div>
+            <div class="led-indicator">
+                <div class="led" id="voiceLed"></div>
+                <div class="led-label">VOICE</div>
+            </div>
+            <div class="led-indicator">
+                <div class="led" id="telegramLed"></div>
+                <div class="led-label">TELEGRAM</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class IriShkaIntercom {
+            constructor() {
+                this.chatArea = document.getElementById('chatArea');
+                this.pttButton = document.getElementById('pttButton');
+                this.playButton = document.getElementById('playButton');
+                this.leds = {
+                    llm: document.getElementById('llmLed'),
+                    hear: document.getElementById('hearLed'),
+                    voice: document.getElementById('voiceLed'),
+                    telegram: document.getElementById('telegramLed')
+                };
+                
+                this.isRecording = false;
+                this.messages = [];
+                this.currentAudio = null;
+                
+                this.init();
+            }
+            
+            init() {
+                // PTT Button Events
+                this.pttButton.addEventListener('mousedown', () => this.startRecording());
+                this.pttButton.addEventListener('mouseup', () => this.stopRecording());
+                this.pttButton.addEventListener('mouseleave', () => this.stopRecording());
+                this.pttButton.addEventListener('touchstart', () => this.startRecording());
+                this.pttButton.addEventListener('touchend', () => this.stopRecording());
+                
+                // Play Button Event
+                this.playButton.addEventListener('click', () => this.playLastMessage());
+                
+                // Simulate system status
+                this.simulateSystemStatus();
+                
+                // Add some demo messages
+                setTimeout(() => {
+                    this.addMessage('user', 'What can you help me with?');
+                    setTimeout(() => {
+                        this.simulateResponse('I can assist with business tasks, scheduling, data analysis, and communications. How may I help you today?');
+                    }, 1000);
+                }, 2000);
+            }
+            
+            startRecording() {
+                if (this.isRecording) return;
+                
+                this.isRecording = true;
+                this.pttButton.classList.add('recording');
+                this.pttButton.innerHTML = 'RECORDING<br>RELEASE';
+                
+                // Activate HEAR LED
+                this.leds.hear.classList.add('active');
+                
+                // Simulate voice recording
+                this.simulateVoiceInput();
+            }
+            
+            stopRecording() {
+                if (!this.isRecording) return;
+                
+                this.isRecording = false;
+                this.pttButton.classList.remove('recording');
+                this.pttButton.innerHTML = 'PTT<br>SPEAK';
+                
+                // Deactivate HEAR LED
+                this.leds.hear.classList.remove('active');
+                
+                // Process the recording
+                this.processRecording();
+            }
+            
+            simulateVoiceInput() {
+                // Simulate audio input visualization
+                let intensity = 0;
+                const audioInterval = setInterval(() => {
+                    if (!this.isRecording) {
+                        clearInterval(audioInterval);
+                        return;
+                    }
+                    
+                    intensity = Math.random();
+                    // Could add audio visualization here
+                }, 100);
+            }
+            
+            processRecording() {
+                // Activate LLM LED for processing
+                this.leds.llm.classList.add('active');
+                
+                // Simulate processing delay
+                setTimeout(() => {
+                    const responses = [
+                        'Understood. Let me help you with that.',
+                        'I\'ll process that request right away.',
+                        'Got it! Working on your task now.',
+                        'Processing your request...',
+                        'I\'m analyzing the information you provided.'
+                    ];
+                    
+                    const userMessage = 'Voice message received';
+                    this.addMessage('user', userMessage);
+                    
+                    setTimeout(() => {
+                        const response = responses[Math.floor(Math.random() * responses.length)];
+                        this.simulateResponse(response);
+                        this.leds.llm.classList.remove('active');
+                    }, 1500);
+                }, 500);
+            }
+            
+            simulateResponse(text) {
+                // Show typing indicator
+                const typingDiv = document.createElement('div');
+                typingDiv.className = 'chat-message assistant-message typing-indicator';
+                typingDiv.innerHTML = '<strong>Iri-shka:</strong> <span class="typing-dots">typing</span>';
+                this.chatArea.appendChild(typingDiv);
+                this.scrollToBottom();
+                
+                // Activate VOICE LED
+                this.leds.voice.classList.add('active');
+                
+                setTimeout(() => {
+                    // Remove typing indicator
+                    this.chatArea.removeChild(typingDiv);
+                    
+                    // Add actual response
+                    this.addMessage('assistant', text);
+                    
+                    // Deactivate VOICE LED
+                    this.leds.voice.classList.remove('active');
+                }, 2000);
+            }
+            
+            addMessage(sender, text) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `chat-message ${sender}-message`;
+                
+                if (sender === 'assistant') {
+                    messageDiv.innerHTML = `<strong>Iri-shka:</strong> ${text}`;
+                } else {
+                    messageDiv.innerHTML = `<strong>You:</strong> ${text}`;
+                }
+                
+                this.chatArea.appendChild(messageDiv);
+                this.messages.push({ sender, text, timestamp: Date.now() });
+                this.scrollToBottom();
+            }
+            
+            playLastMessage() {
+                if (this.messages.length === 0) return;
+                
+                const lastMessage = this.messages[this.messages.length - 1];
+                if (lastMessage.sender === 'assistant') {
+                    // Activate VOICE LED
+                    this.leds.voice.classList.add('active');
+                    
+                    // Simulate audio playback
+                    setTimeout(() => {
+                        this.leds.voice.classList.remove('active');
+                    }, 2000);
+                }
+            }
+            
+            simulateSystemStatus() {
+                // Randomly activate Telegram LED to show connectivity
+                setInterval(() => {
+                    this.leds.telegram.classList.toggle('active');
+                    setTimeout(() => {
+                        this.leds.telegram.classList.remove('active');
+                    }, 500);
+                }, 8000 + Math.random() * 4000);
+                
+                // LLM LED occasional activity
+                setInterval(() => {
+                    if (!this.leds.llm.classList.contains('active')) {
+                        this.leds.llm.classList.add('active');
+                        setTimeout(() => {
+                            this.leds.llm.classList.remove('active');
+                        }, 200);
+                    }
+                }, 15000 + Math.random() * 10000);
+            }
+            
+            scrollToBottom() {
+                this.chatArea.scrollTop = this.chatArea.scrollHeight;
+            }
+        }
+        
+        // Initialize the intercom when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new IriShkaIntercom();
+        });
+    </script>
+</body>
+</html>

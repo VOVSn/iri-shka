@@ -1,0 +1,291 @@
+/* webui/static/css/theme-camo-crt.css */
+
+body.theme-camo-crt {
+    /* Distressed, noisy background suggesting dust, static, or a damaged environment */
+    background-color: #383028; /* Dark, muddy brown */
+    background-image: 
+        url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%234a4035' fill-opacity='0.1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E"),
+        linear-gradient(rgba(0,0,0,0.1) 1px, transparent 1px), /* Subtle horizontal lines */
+        linear-gradient(90deg, rgba(0,0,0,0.1) 1px, transparent 1px); /* Subtle vertical lines */
+    background-size: 60px 60px, 100% 3px, 3px 100%; /* Control pattern and line sizes */
+    color: #9a8870; /* Dusty, desaturated text */
+    font-family: 'Roboto Mono', 'Courier New', monospace; /* Monospaced, utilitarian font */
+}
+
+/* Camouflage pattern - can be applied to specific elements or as an overlay */
+.camo-pattern-bg {
+    background-color: #5a4a3a; /* Base camo color */
+    background-image: 
+        /* Large splotches */
+        radial-gradient(circle at 20% 30%, #4a3a2a 15%, transparent 15.5%),
+        radial-gradient(circle at 80% 70%, #6b5a4a 20%, transparent 20.5%),
+        radial-gradient(circle at 50% 60%, #3c2f20 10%, transparent 10.5%),
+        /* Smaller splotches */
+        radial-gradient(circle at 30% 80%, #504030 8%, transparent 8.5%),
+        radial-gradient(circle at 70% 10%, #453525 12%, transparent 12.5%);
+    background-size: 200px 200px; /* Adjust for pattern scale */
+    background-blend-mode: multiply;
+}
+
+
+body.theme-camo-crt .intercom-unit {
+    /* Looks like a salvaged piece of equipment */
+    background-color: #4a3b2a; /* Dark, weathered metal/plastic */
+    border: 2px solid #2a2015; /* Rusted/darkened metal edge */
+    border-radius: 8px; /* Less rounded, more industrial */
+    box-shadow: 
+        0 0 0 3px rgba(60,50,40,0.7), /* Outer dark border */
+        5px 5px 15px rgba(0,0,0,0.5), /* Drop shadow */
+        inset 0 0 10px rgba(10,5,0,0.4), /* Inner grime */
+        inset 2px 2px 3px rgba(80,70,60,0.3); /* Scratches/uneven surface */
+    /* Apply camo pattern to the unit directly or use a pseudo-element */
+    position: relative; /* For pseudo-element camo overlay */
+}
+/* Optional Camo Overlay for the unit */
+/* body.theme-camo-crt .intercom-unit::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-image: 
+        radial-gradient(circle at 20% 30%, rgba(74,58,42,0.5) 15%, transparent 15.5%),
+        radial-gradient(circle at 80% 70%, rgba(107,90,74,0.5) 20%, transparent 20.5%);
+    background-size: 150px 150px;
+    opacity: 0.4;
+    pointer-events: none;
+    border-radius: inherit;
+} */
+
+
+body.theme-camo-crt .intercom-unit::before { /* Top grime/dust */
+    background: linear-gradient(180deg, rgba(20,10,0,0.2) 0%, transparent 70%);
+    border-radius: 8px 8px 0 0;
+}
+
+body.theme-camo-crt .theme-switch-button {
+    background: #5a4a3a; /* Weathered metal */
+    border: 1px solid #3a3025;
+    color: #a08f7a;
+    border-radius: 4px; /* More blocky */
+    box-shadow: 1px 1px 3px rgba(0,0,0,0.4), inset 1px 1px 2px rgba(100,90,80,0.2);
+}
+
+body.theme-camo-crt .brand-label {
+    color: #b09f8a; /* Faded stencil text */
+    font-family: 'Stencil Std', 'Impact', 'Orbitron', sans-serif; /* Stencil-like font if available */
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-size: 15px;
+    text-shadow: 1px 1px 0px #2a2015, -1px -1px 0px #7a6a5a; /* Hard shadow for stencil effect */
+    opacity: 0.8;
+}
+
+/* Top Recording LED - like a salvaged indicator light */
+body.theme-camo-crt .led-indicator { /* OFF state */
+    background: #2a2015; /* Dark, unlit bulb */
+    border: 1px solid #1a1510;
+    box-shadow: inset 0 0 3px rgba(0,0,0,0.7);
+    width: 16px; height: 16px; /* Larger, more industrial */
+}
+body.theme-camo-crt .led-indicator.active { /* ON state - flickering, aged red */
+    background: #a02020; /* Dull red */
+    border-color: #701010;
+    box-shadow: 0 0 8px #ff4040, 0 0 12px #ff4040, inset 0 0 3px #d03030;
+    animation: flicker-red 1s infinite alternate;
+}
+@keyframes flicker-red {
+    0%, 100% { opacity: 1; box-shadow: 0 0 8px #ff4040, 0 0 12px #ff4040, inset 0 0 3px #d03030; }
+    50% { opacity: 0.6; box-shadow: 0 0 5px #d03030, 0 0 8px #d03030, inset 0 0 2px #a02020; }
+}
+
+
+/* Speaker Grille - like a heavy-duty, grated metal piece */
+body.theme-camo-crt .speaker-grille {
+    background: #3a3025; /* Dark, rusted metal */
+    border-radius: 4px; /* Blocky */
+    height: 35px;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.6), 0 1px 1px rgba(90,80,70,0.2);
+    padding: 6px;
+}
+body.theme-camo-crt .speaker-hole {
+    background: #1a1510; /* Very dark holes */
+    width: 5px; height: 18px; /* Thicker, stronger holes */
+    border-radius: 1px;
+    box-shadow: none;
+}
+
+/* Screen Area - Old CRT Monitor */
+body.theme-camo-crt .screen-container {
+    background: #1a1815; /* Dark CRT casing */
+    border: 3px solid #4a4035; /* Thick bezel */
+    border-radius: 10px 10px 25px 25px / 10px 10px 30px 30px; /* CRT curvature */
+    box-shadow: 0 5px 15px rgba(0,0,0,0.4), inset 0 0 10px rgba(0,0,0,0.6);
+    padding: 15px; /* Space for screen glare */
+    margin-bottom: 15px;
+    position: relative; /* For CRT effects */
+}
+/* CRT Screen Glare and Curvature */
+body.theme-camo-crt .screen-container::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    border-radius: inherit;
+    background: radial-gradient(ellipse at center, rgba(150,180,150,0.08) 0%, rgba(100,120,100,0.0) 70%); /* Subtle central highlight */
+    box-shadow: inset 0 0 80px 20px rgba(10,15,10,0.3); /* Vignette */
+    pointer-events: none;
+}
+
+body.theme-camo-crt .screen {
+    background: #080a08; /* Very dark green/black screen */
+    color: #66ff66; /* Classic green phosphor */
+    font-family: 'VT323', 'Courier New', monospace; /* Pixel/CRT font if available */
+    font-size: 14px; /* Larger pixel text */
+    text-shadow: 0 0 3px #33cc33, 0 0 6px #339933, 0 0 1px #ccffcc; /* Phosphor glow */
+    border-radius: 5px 5px 15px 15px / 5px 5px 20px 20px; /* Inner screen curve */
+    padding: 8px;
+    position: relative; /* For scanlines */
+    overflow-x: hidden; /* Hide horizontal scroll often caused by text shadow */
+    scrollbar-color: #338833 #113311;
+}
+body.theme-camo-crt .screen::-webkit-scrollbar-track { background: #112211; }
+body.theme-camo-crt .screen::-webkit-scrollbar-thumb { background-color: #449944; border-radius: 2px;}
+
+/* CRT Scanlines */
+body.theme-camo-crt .screen::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.3) 2px, rgba(0,0,0,0.3) 3px);
+    opacity: 0.6;
+    pointer-events: none;
+    z-index: 1; /* Above text glow but below text content */
+}
+
+body.theme-camo-crt .screen p {
+    background: transparent; /* No individual message backgrounds */
+    border: none;
+    padding: 2px 0; margin-bottom: 4px;
+}
+body.theme-camo-crt .screen .user-message { color: #88ff88; }
+body.theme-camo-crt .screen .user-message::before { content: "USR:> "; color: #55aa55; }
+body.theme-camo-crt .screen .assistant-message { color: #66ff66; }
+body.theme-camo-crt .screen .assistant-message::before { content: "SYS:> "; color: #448844;}
+body.theme-camo-crt .screen .system-message { color: #44cc44; font-style: italic; opacity: 0.8; }
+body.theme-camo-crt .screen .error-message { color: #ff6666; text-shadow: 0 0 3px #cc3333; }
+
+
+body.theme-camo-crt .status-log-line {
+    background: rgba(0,20,0,0.5);
+    color: #55cc55; /* Green phosphor */
+    border-top: 1px solid rgba(50,100,50,0.3);
+    text-shadow: 0 0 3px #339933;
+    font-size: 10px;
+    height: 22px; line-height: 18px;
+}
+body.theme-camo-crt .cursor { background: #66ff66; box-shadow: 0 0 5px #66ff66, 0 0 8px #33cc33; animation: blink-crt 0.8s infinite; }
+@keyframes blink-crt {
+    0%, 100% { background: #66ff66; box-shadow: 0 0 5px #66ff66, 0 0 8px #33cc33; opacity: 1;}
+    50% { background: #339933; box-shadow: none; opacity: 0.7;}
+}
+
+/* Controls - Rugged, salvaged parts */
+body.theme-camo-crt .speak-button,
+body.theme-camo-crt .play-button {
+    border-radius: 6px; /* More blocky */
+    border: 2px solid #201810;
+    color: #d0c0a0; /* Faded text */
+    text-shadow: 1px 1px 0 #1a1008;
+    transition: background-color 0.1s ease, box-shadow 0.1s ease, transform 0.1s ease;
+}
+
+body.theme-camo-crt .speak-button {
+    background: linear-gradient(145deg, #6a553a, #4a3b2a); /* Weathered dark bronze */
+    box-shadow: 3px 3px 5px rgba(0,0,0,0.5), inset 1px 1px 2px rgba(120,100,80,0.2);
+    font-size: 13px; text-transform: uppercase;
+}
+body.theme-camo-crt .speak-button:hover {
+    background: linear-gradient(145deg, #7a654a, #5a4b3a);
+}
+body.theme-camo-crt .speak-button:active {
+    background: linear-gradient(145deg, #4a3b2a, #3a2b1a);
+    box-shadow: inset 2px 2px 4px rgba(0,0,0,0.6), 1px 1px 2px rgba(0,0,0,0.3);
+    transform: translateY(1px);
+}
+body.theme-camo-crt .speak-button.recording {
+    background: #803030; /* Dull, deep red */
+    border-color: #501010;
+    color: #ffb0b0;
+    text-shadow: 1px 1px 0 #401010;
+    box-shadow: inset 0 0 8px rgba(40,0,0,0.5), 0 0 5px #a02020;
+    animation: none; /* Remove pulse for more rugged feel, or use flicker */
+}
+body.theme-camo-crt .speak-button:disabled {
+    background: #4a4035; border-color: #302820; color: #7a6a5a;
+}
+
+
+body.theme-camo-crt .play-button {
+    background: linear-gradient(145deg, #504838, #403828); /* Dark olive/brown */
+    box-shadow: 2px 2px 4px rgba(0,0,0,0.4), inset 1px 1px 1px rgba(100,90,70,0.2);
+}
+body.theme-camo-crt .play-button:hover {
+    background: linear-gradient(145deg, #605848, #504838);
+}
+body.theme-camo-crt .play-button:active {
+    background: linear-gradient(145deg, #403828, #302818);
+}
+body.theme-camo-crt .play-button:disabled {
+    background: #453e30; border-color: #302a20; color: #706550;
+}
+body.theme-camo-crt .play-icon { border-left-color: #d0c0a0; }
+body.theme-camo-crt .pause-bar { background-color: #d0c0a0; }
+
+
+/* Status LED Panel - Exposed circuit board look */
+body.theme-camo-crt .status-led-panel {
+    background: rgba(30,25,20,0.7); /* Dark, grimy pcb */
+    border-radius: 4px;
+    padding: 8px 12px;
+    box-shadow: inset 0 0 5px rgba(0,0,0,0.5), 0 1px 2px rgba(100,90,80,0.1);
+    border: 1px solid #201810;
+}
+body.theme-camo-crt .status-led {
+    width: 14px; height: 14px;
+    border-radius: 3px; /* Square-ish LEDs */
+    border: 1px solid #1a1008;
+    box-shadow: inset 0 0 2px rgba(0,0,0,0.6);
+    position: relative;
+}
+body.theme-camo-crt .status-led::before { /* Simulate solder points or LED housing */
+    content: '';
+    position: absolute;
+    top: -2px; left: -2px; right: -2px; bottom: -2px;
+    border: 1px solid rgba(80,70,60,0.3);
+    border-radius: 4px;
+}
+
+body.theme-camo-crt .status-led { background-color: #201508; } /* Unlit dark brown */
+body.theme-camo-crt .status-led.led-ok { 
+    background-color: #336633; /* Dark, murky green */
+    box-shadow: inset 0 0 2px #113311, 0 0 5px #669966, 0 0 8px #669966;
+}
+body.theme-camo-crt .status-led.led-warn { 
+    background-color: #cc9900; /* Ochre/dark yellow */
+    box-shadow: inset 0 0 2px #886600, 0 0 5px #ffcc33, 0 0 8px #ffcc33;
+}
+body.theme-camo-crt .status-led.led-error { 
+    background-color: #993333; /* Dark, dull red */
+    box-shadow: inset 0 0 2px #661111, 0 0 5px #cc6666, 0 0 8px #cc6666;
+}
+body.theme-camo-crt .status-led.led-off { background-color: #302518; }
+body.theme-camo-crt .status-led.led-info { 
+    background-color: #336699; /* Dusty blue */
+    box-shadow: inset 0 0 2px #113366, 0 0 5px #6699cc, 0 0 8px #6699cc;
+}
+
+body.theme-camo-crt .led-label {
+    color: #a08f7a; /* Faded stencil text */
+    font-size: 9px;
+    font-family: 'Stencil Std', 'Impact', sans-serif;
+    text-shadow: 1px 1px 0 #2a2015;
+    opacity: 0.9;
+}
