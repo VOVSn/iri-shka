@@ -26,6 +26,15 @@ WEB_UI_PORT = int(os.getenv("WEB_UI_PORT", "8080"))
 PYDUB_AVAILABLE_FOR_WEB_CONVERSION = os.getenv("PYDUB_AVAILABLE_FOR_WEB_CONVERSION", "True").lower() == "true"
 
 
+# --- SSL Configuration for Web UI ---
+# Enables HTTPS for the Web UI. Requires SSL_CERT_FILE and SSL_KEY_FILE to be valid.
+ENABLE_WEB_UI_SSL = os.getenv("ENABLE_WEB_UI_SSL", "True").lower() == "true"
+# Path to the SSL certificate file (e.g., cert.pem), relative to the project root.
+SSL_CERT_FILE = os.getenv("SSL_CERT_FILE", "ssl/cert.pem")
+# Path to the SSL private key file (e.g., key.pem), relative to the project root.
+SSL_KEY_FILE = os.getenv("SSL_KEY_FILE", "ssl/key.pem")
+
+
 # --- Ollama ---
 OLLAMA_API_URL = os.getenv("OLLAMA_API_URL", "http://localhost:11434/api/generate")
 OLLAMA_MODEL_NAME = "phi4"
@@ -260,23 +269,5 @@ Provide ONLY a valid JSON response with the following structure. Do NOT include 
   "updated_assistant_state": {{ ... your full updated Iri-shka state object ... }},
   "message_for_admin": "Your RUSSIAN summary for {admin_name_value} here (single sentence, use known name if available).",
   "polite_followup_message_for_customer": "Your RUSSIAN polite follow-up message to the customer, or 'NO_CUSTOMER_FOLLOWUP_NEEDED'."
-}}
-"""
-
-# For Web UI Interactions (Simplified)
-OLLAMA_WEB_PROMPT_TEMPLATE = """
-You are Iri-shka, a helpful AI assistant speaking to a user via a web interface.
-The user said: "{web_user_input}"
-Current time is: {current_time_string}
-Respond clearly and naturally to the user. Your response should be a single string of text.
-If the user's language is Russian, respond in Russian. Otherwise, respond in English.
-For example, if the user says "Привет", you might respond "Привет! Чем могу помочь?".
-If the user says "Hello", you might respond "Hello! How can I help you today?".
-
-Provide ONLY a valid JSON response with the following structure.
-Do NOT include any text before or after the JSON object. Ensure the JSON is well-formed.
-
-{{
-  "answer_to_user": "Your natural language response here."
 }}
 """

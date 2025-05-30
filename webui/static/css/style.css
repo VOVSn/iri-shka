@@ -1,116 +1,455 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Roboto+Mono:wght@300;400;500&display=swap');
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
 body {
-    font-family: sans-serif;
-    margin: 20px;
-    background-color: #f4f4f4;
-    color: #333;
+    background: linear-gradient(135deg, #2c3e50 0%, #34495e 50%, #2c3e50 100%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Roboto Mono', monospace;
+    overflow: hidden;
+}
+
+.intercom-unit {
+    width: 400px;
+    /* height: 650px; /* Increased height for status LEDs */
+    min-height: 680px; /* Use min-height to ensure content fits */
+    background: linear-gradient(145deg, #3a3a3a 0%, #2a2a2a 50%, #1a1a1a 100%);
+    border-radius: 25px;
+    box-shadow: 
+        0 20px 50px rgba(0, 0, 0, 0.7),
+        inset 0 2px 5px rgba(255, 255, 255, 0.1),
+        inset 0 -2px 5px rgba(0, 0, 0, 0.3);
+    position: relative;
+    border: 3px solid #444;
+    overflow: hidden;
+    padding-bottom: 120px; /* Space for status LEDs and text */
+}
+
+.intercom-unit::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 50px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, transparent 100%);
+    border-radius: 25px 25px 0 0;
+}
+
+.brand-label {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #b0b0b0; /* Brighter label */
+    font-size: 14px; /* Slightly larger */
+    font-weight: 700; /* Bolder */
+    font-family: 'Orbitron', sans-serif; /* Using Orbitron */
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    text-shadow: 0 0 5px rgba(0, 255, 65, 0.3); /* Subtle green glow */
+}
+
+.led-indicator { /* This is the top recording LED */
+    position: absolute;
+    top: 25px; /* Adjusted position */
+    right: 30px;
+    width: 15px; /* Slightly larger */
+    height: 15px;
+    border-radius: 50%;
+    background: #222; /* Darker off state */
+    border: 1px solid #111;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.8), 0 0 3px rgba(0,0,0,0.5);
+    transition: all 0.3s ease;
+}
+
+.led-indicator.active { /* For recording LED */
+    background: radial-gradient(circle, #ff4141, #e00000);
+    box-shadow: 
+        0 0 12px #ff4141,
+        0 0 20px #ff4141,
+        inset 0 1px 2px rgba(255, 100, 100, 0.5),
+        0 0 5px #d10000;
+    border: 1px solid #b30000;
+}
+
+
+.speaker-grille {
+    position: absolute;
+    top: 60px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 300px;
+    height: 40px;
+    background: #111;
+    border-radius: 20px;
+    box-shadow: inset 0 3px 10px rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 0 10px; /* Ensure holes don't touch edges */
+}
+
+.speaker-hole {
+    width: 3px;
+    height: 20px;
+    background: #282828; /* Slightly lighter holes */
+    border-radius: 2px;
+    box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.6);
+}
+
+.screen-container {
+    position: absolute;
+    top: 120px; /* Adjusted for speaker grille */
+    left: 50%;
+    transform: translateX(-50%);
+    width: 340px; /* Slightly wider */
+    height: 220px; /* Taller */
+    background: #000;
+    border-radius: 10px;
+    box-shadow: 
+        inset 0 5px 15px rgba(0, 0, 0, 0.9),
+        0 2px 5px rgba(0, 0, 0, 0.5);
+    border: 4px solid #333;
+    overflow: hidden;
+}
+
+.screen {
+    width: 100%;
+    height: 100%;
+    background: #051a05; /* Darker green background */
+    color: #00ff41;
+    font-family: 'Roboto Mono', monospace; /* Changed font */
+    font-size: 13px; /* Adjusted */
+    font-weight: 400;
+    padding: 10px; /* Adjusted */
+    overflow-y: auto;
+    line-height: 1.5; /* Increased for readability */
+    text-shadow: 0 0 3px #00ff41, 0 0 5px rgba(0, 255, 65, 0.5); /* Enhanced glow */
+    position: relative;
+    scrollbar-width: thin;
+    scrollbar-color: #00ff41 #001100;
+}
+.screen::-webkit-scrollbar { width: 6px; }
+.screen::-webkit-scrollbar-track { background: #001100; }
+.screen::-webkit-scrollbar-thumb { background-color: #00ff41; border-radius: 6px; border: 1px solid #001100;}
+
+
+.screen p { /* For chat messages */
+    margin-bottom: 8px;
+    word-wrap: break-word;
+}
+.screen .user-message {
+    color: #80ffaf; /* Lighter green for user */
+    text-align: right;
+    padding-right: 5px;
+}
+.screen .user-message::before {
+    content: "YOU: ";
+    font-weight: bold;
+}
+.screen .assistant-message {
+    color: #00ff41; /* Bright green for Irishka */
+}
+.screen .assistant-message::before {
+    content: "IRISHKA: ";
+    font-weight: bold;
+}
+.screen .system-message {
+    color: #00a028; /* Dimmer green for system */
+    font-style: italic;
+}
+.screen .error-message {
+    color: #ff4141; /* Red for errors */
+    font-weight: bold;
+}
+
+
+.screen::before { /* Scanlines effect */
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 1px, /* Thinner transparent line */
+        rgba(0, 0, 0, 0.1) 1px, /* Darker scanline for subtlety */
+        rgba(0, 0, 0, 0.1) 2px /* Thinner scanline */
+    );
+    pointer-events: none;
+    opacity: 0.7;
+}
+
+.cursor {
+    display: inline-block;
+    width: 7px;
+    height: 14px;
+    background: #00ff41;
+    animation: blink 1s infinite;
+    margin-left: 1px;
+    box-shadow: 0 0 5px #00ff41;
+}
+
+@keyframes blink {
+    0%, 49% { opacity: 1; }
+    50%, 100% { opacity: 0; }
+}
+
+.controls-section {
+    position: absolute;
+    bottom: 140px; /* Adjusted for status LEDs */
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 30px; /* Reduced gap */
+    align-items: center;
+}
+
+.speak-button { /* This is now recordButton */
+    width: 100px; /* Slightly smaller */
+    height: 100px;
+    border-radius: 50%;
+    background: linear-gradient(145deg, #e74c3c 0%, #c0392b 50%, #a93226 100%);
+    border: 4px solid #922b21; /* Adjusted border */
+    box-shadow: 
+        0 12px 25px rgba(0, 0, 0, 0.6), /* Adjusted shadow */
+        inset 0 3px 8px rgba(255, 255, 255, 0.2),
+        inset 0 -3px 8px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 700; /* Adjusted */
+    font-size: 14px; /* Adjusted */
+    font-family: 'Orbitron', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.speak-button:hover {
+    background: linear-gradient(145deg, #ec7063 0%, #e74c3c 50%, #c0392b 100%);
+    transform: translateY(-1px);
+    box-shadow: 
+        0 18px 35px rgba(0, 0, 0, 0.7),
+        inset 0 3px 10px rgba(255, 255, 255, 0.3),
+        inset 0 -3px 10px rgba(0, 0, 0, 0.2);
+}
+
+.speak-button:active {
+    transform: translateY(2px); /* Adjusted */
+    box-shadow: 
+        0 6px 12px rgba(0, 0, 0, 0.6), /* Adjusted */
+        inset 0 4px 12px rgba(0, 0, 0, 0.4); /* Adjusted */
+}
+.speak-button:disabled {
+    background: linear-gradient(145deg, #888 0%, #666 50%, #444 100%);
+    border-color: #333;
+    color: #aaa;
+    cursor: not-allowed;
+    text-shadow: none;
+    box-shadow: 0 5px 10px rgba(0,0,0,0.4), inset 0 2px 4px rgba(0,0,0,0.3);
+}
+
+
+.speak-button.recording {
+    animation: pulse-red 1.5s infinite;
+}
+
+@keyframes pulse-red { /* Unchanged */
+    0%, 100% { 
+        box-shadow: 
+            0 15px 30px rgba(0, 0, 0, 0.6),
+            inset 0 3px 10px rgba(255, 255, 255, 0.2),
+            inset 0 -3px 10px rgba(0, 0, 0, 0.3),
+            0 0 0 0 rgba(231, 76, 60, 0.7);
+    }
+    50% { 
+        box-shadow: 
+            0 15px 30px rgba(0, 0, 0, 0.6),
+            inset 0 3px 10px rgba(255, 255, 255, 0.2),
+            inset 0 -3px 10px rgba(0, 0, 0, 0.3),
+            0 0 0 20px rgba(231, 76, 60, 0);
+    }
+}
+
+.play-button { /* This is now playIrishkaButton */
+    width: 60px; /* Slightly smaller */
+    height: 60px;
+    border-radius: 50%;
+    background: linear-gradient(145deg, #27ae60 0%, #229954 50%, #1e8449 100%);
+    border: 3px solid #196f3d;
+    box-shadow: 
+        0 8px 15px rgba(0, 0, 0, 0.5), /* Adjusted */
+        inset 0 2px 4px rgba(255, 255, 255, 0.2),
+        inset 0 -2px 4px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 18px; /* Adjusted */
+}
+
+.play-button:hover {
+    background: linear-gradient(145deg, #58d68d 0%, #27ae60 50%, #229954 100%);
+    transform: translateY(-1px);
+    box-shadow: 
+        0 12px 20px rgba(0, 0, 0, 0.6), /* Adjusted */
+        inset 0 2px 5px rgba(255, 255, 255, 0.3),
+        inset 0 -2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.play-button:active {
+    transform: translateY(1px); /* Adjusted */
+    box-shadow: 
+        0 4px 8px rgba(0, 0, 0, 0.5), /* Adjusted */
+        inset 0 3px 6px rgba(0, 0, 0, 0.4); /* Adjusted */
+}
+
+.play-button:disabled {
+    background: linear-gradient(145deg, #777 0%, #555 50%, #333 100%);
+    border-color: #222;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+
+.play-button.playing {
+    animation: pulse-green 2s infinite;
+}
+
+@keyframes pulse-green { /* Unchanged */
+    0%, 100% { 
+        box-shadow: 
+            0 10px 20px rgba(0, 0, 0, 0.5),
+            inset 0 2px 5px rgba(255, 255, 255, 0.2),
+            inset 0 -2px 5px rgba(0, 0, 0, 0.3),
+            0 0 0 0 rgba(39, 174, 96, 0.7);
+    }
+    50% { 
+        box-shadow: 
+            0 10px 20px rgba(0, 0, 0, 0.5),
+            inset 0 2px 5px rgba(255, 255, 255, 0.2),
+            inset 0 -2px 5px rgba(0, 0, 0, 0.3),
+            0 0 0 15px rgba(39, 174, 96, 0);
+    }
+}
+
+.app-status-text { /* Was status-text */
+    position: absolute;
+    bottom: 20px; /* Adjusted */
+    left: 50%;
+    transform: translateX(-50%);
+    color: #777; /* Slightly lighter */
+    font-size: 12px; /* Larger */
+    font-weight: 400; /* Normal weight */
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    width: 90%;
+    text-align: center;
+    padding: 5px;
+    background-color: rgba(0,0,0,0.1);
+    border-radius: 3px;
+}
+
+.play-icon {
+    width: 0;
+    height: 0;
+    border-left: 12px solid white; /* Adjusted size */
+    border-top: 8px solid transparent;
+    border-bottom: 8px solid transparent;
+    margin-left: 2px; /* Adjusted margin */
+}
+
+.pause-icon {
+    display: flex;
+    gap: 3px; /* Adjusted gap */
+}
+
+.pause-bar {
+    width: 3px; /* Adjusted width */
+    height: 14px; /* Adjusted height */
+    background: white;
+    border-radius: 1px;
+}
+
+/* New Status LED Panel */
+.status-led-panel {
+    position: absolute;
+    bottom: 60px; /* Position above app-status-text */
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 15px; /* Spacing between LED groups */
+    padding: 8px 15px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.5);
+}
+
+.status-led-group {
     display: flex;
     flex-direction: column;
     align-items: center;
+    gap: 4px;
 }
 
-.container {
-    background-color: #fff;
-    padding: 20px;
-    border-radius: 8px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-    width: 80%;
-    max-width: 600px;
+.status-led {
+    width: 18px; /* Larger LEDs */
+    height: 18px;
+    border-radius: 50%;
+    background-color: #222; /* Default OFF state - dark grey */
+    border: 1px solid #111;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.7);
+    transition: background-color 0.3s ease, box-shadow 0.3s ease;
+}
+.led-label {
+    color: #888;
+    font-size: 9px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
-h1, h2 {
-    color: #333;
-    text-align: center;
+/* LED Colors */
+.status-led.led-ok { /* Green */
+    background-color: #2ecc71;
+    box-shadow: 0 0 8px #2ecc71, 0 0 15px #2ecc71, inset 0 1px 2px rgba(255,255,255,0.3);
+    border: 1px solid #27ae60;
 }
-
-button {
-    background-color: #007bff;
-    color: white;
-    border: none;
-    padding: 10px 15px;
-    border-radius: 5px;
-    cursor: pointer;
-    font-size: 16px;
-    margin: 10px 0;
+.status-led.led-warn { /* Yellow / Amber */
+    background-color: #f1c40f;
+    box-shadow: 0 0 8px #f1c40f, 0 0 15px #f1c40f, inset 0 1px 2px rgba(255,255,255,0.3);
+    border: 1px solid #f39c12;
 }
-
-button:hover {
-    background-color: #0056b3;
+.status-led.led-error { /* Red */
+    background-color: #e74c3c;
+    box-shadow: 0 0 8px #e74c3c, 0 0 15px #e74c3c, inset 0 1px 2px rgba(255,255,255,0.3);
+    border: 1px solid #c0392b;
 }
-
-button:disabled {
-    background-color: #cccccc;
-    cursor: not-allowed;
+.status-led.led-off { /* Grey - slightly lighter than default off */
+    background-color: #555;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.7);
+    border: 1px solid #444;
 }
-
-#recordButton.recording {
-    background-color: #dc3545; /* Red when recording */
-}
-
-#recordButton.recording:hover {
-    background-color: #c82333;
-}
-
-.chat-area {
-    margin-top: 20px;
-    border: 1px solid #ddd;
-    padding: 15px;
-    border-radius: 5px;
-    background-color: #f9f9f9;
-    min-height: 100px;
-}
-
-.chat-area p {
-    margin: 5px 0;
-}
-
-.user-message {
-    color: #007bff;
-    text-align: right;
-}
-
-.assistant-message {
-    color: #28a745;
-    text-align: left;
-}
-
-.status-area {
-    margin-top: 20px;
-    font-size: 0.9em;
-    color: #555;
-}
-.status-area div {
-    margin-bottom: 5px;
-    padding: 8px;
-    background-color: #e9ecef;
-    border-radius: 4px;
-}
-
-.status-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.status-label {
-    font-weight: bold;
-}
-.status-value {
-    padding: 2px 6px;
-    border-radius: 3px;
-    color: white;
-}
-.status-ok { background-color: #28a745; }
-.status-warn { background-color: #ffc107; color: #333;}
-.status-error { background-color: #dc3545; }
-.status-off { background-color: #6c757d; }
-.status-info { background-color: #17a2b8; }
-
-#appStatus {
-    margin-top: 10px;
-    font-weight: bold;
-}
-
-#audioPlayback {
-    width: 100%;
-    margin-top: 15px;
+.status-led.led-info { /* Blue */
+    background-color: #3498db;
+    box-shadow: 0 0 8px #3498db, 0 0 15px #3498db, inset 0 1px 2px rgba(255,255,255,0.3);
+    border: 1px solid #2980b9;
 }

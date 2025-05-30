@@ -71,13 +71,11 @@ def start_recording(gui_callbacks=None):
             logger.critical(error_msg, exc_info=True)
             if gui_callbacks and 'messagebox_error' in gui_callbacks:
                 gui_callbacks['messagebox_error']("Audio Error", error_msg)
-            # else: # logger.critical already logged it
-            #     print(f"CRITICAL AUDIO ERROR (NO GUI): {error_msg}")
-
-            if gui_callbacks and 'status_update' in gui_callbacks:
-                gui_callbacks['status_update']("Audio Error. Ready.")
-            if gui_callbacks and 'speak_button_update' in gui_callbacks:
-                 gui_callbacks['speak_button_update'](True, "Speak")
+            
+            if gui_callbacks and 'status_update' in gui_callbacks: # General status update
+                gui_callbacks['status_update']("Audio Error. Check Mic.")
+            
+            # No longer directly manage speak_button text/state here. main.py handles it.
             _is_recording = False
             if _pyaudio_instance: _pyaudio_instance.terminate()
             _pyaudio_instance = None
@@ -85,7 +83,7 @@ def start_recording(gui_callbacks=None):
             return False
 
     if gui_callbacks and 'status_update' in gui_callbacks:
-        gui_callbacks['status_update']("Recording...")
+        gui_callbacks['status_update']("Recording...") # General status update
     logger.info("Recording started.")
 
     def _recording_loop_worker(target_rate, loop_gui_callbacks):
@@ -95,17 +93,16 @@ def start_recording(gui_callbacks=None):
                 data = _audio_stream.read(config.CHUNK, exception_on_overflow=False)
                 _audio_frames_bytes.append(data)
             except IOError as e:
-                pa_overflow_err_code = getattr(pyaudio, 'paInputOverflowed', -9981) # Default to a known PyAudio error code if not found
-                # Check if e.errno exists and matches paInputOverflowed
+                pa_overflow_err_code = getattr(pyaudio, 'paInputOverflowed', -9981) 
                 if hasattr(e, 'errno') and e.errno == pa_overflow_err_code:
                     logger.warning("Audio input overflowed.")
                 else:
                     logger.error(f"IOError during recording: {e}. Stopping.", exc_info=True)
-                    _is_recording = False
+                    _is_recording = False # Ensure stop if critical IO error
                     break
             except Exception as e:
                 logger.error(f"Unexpected error during recording: {e}. Stopping.", exc_info=True)
-                _is_recording = False
+                _is_recording = False # Ensure stop
                 break
 
         logger.info("Recording finished in thread.")
@@ -136,7 +133,7 @@ def stop_recording():
     if not _is_recording:
         logger.info("No active recording to stop.")
         return
-    _is_recording = False
+    _is_recording = False # Signal the recording thread to stop
     logger.info("Stop recording signal sent.")
 
 
@@ -158,8 +155,6 @@ def save_wav_data_to_file(filepath, frames_byte_list, sample_rate_for_wav, gui_c
             gui_callbacks['status_update'](f"WAV Save Error: {e}")
         if gui_callbacks and 'messagebox_error' in gui_callbacks:
             gui_callbacks['messagebox_error']("WAV Save Error", error_msg)
-        # else:
-        #     logger.error(f"ERROR (NO GUI): {error_msg}") # Already logged
         return False
     finally:
         if pa_temp_save:
@@ -176,8 +171,8 @@ def convert_frames_to_numpy(recorded_sample_rate, gui_callbacks=None):
 
     try:
         audio_data_bytes = b''.join(_audio_frames_bytes)
-        frames_copy_for_save = _audio_frames_bytes[:]
-        _audio_frames_bytes = []
+        frames_copy_for_save = _audio_frames_bytes[:] # Make a copy for saving if needed
+        _audio_frames_bytes = [] # Clear original list
         gc.collect()
 
         audio_int16 = np.frombuffer(audio_data_bytes, dtype=np.int16)
@@ -189,11 +184,9 @@ def convert_frames_to_numpy(recorded_sample_rate, gui_callbacks=None):
         logger.error(error_msg, exc_info=True)
         if gui_callbacks and 'messagebox_error' in gui_callbacks:
             gui_callbacks['messagebox_error']("Audio Conversion Error", error_msg)
-        # else:
-        #     logger.error(f"ERROR (NO GUI): {error_msg}") # Already logged
         if gui_callbacks and 'status_update' in gui_callbacks:
             gui_callbacks['status_update']("Audio conversion error.")
-        _audio_frames_bytes = []
+        _audio_frames_bytes = [] # Ensure it's cleared on error too
         return None, None
 
 
@@ -204,7 +197,7 @@ def shutdown_audio_resources():
 
     if _active_recording_thread and _active_recording_thread.is_alive():
         logger.info("Waiting for recording thread to finish...")
-        _active_recording_thread.join(timeout=1.0)
+        _active_recording_thread.join(timeout=1.0) # Give it a second to finish naturally
         if _active_recording_thread.is_alive():
             logger.warning("Recording thread did not finish cleanly during shutdown.")
 
