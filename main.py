@@ -25,6 +25,12 @@ except ImportError as e:
 
 logger.info("--- APPLICATION MAIN.PY ENTRY POINT ---")
 
+# Determine project root for resolving SSL file paths if needed, assuming main.py is at the root
+# However, config paths are relative to project root, and os.path.exists will use current working directory
+# which should be project root when running main.py
+project_root_dir = os.path.dirname(os.path.abspath(__file__))
+
+
 try:
     import config
     from utils import file_utils, state_manager, audio_processor, gpu_monitor
@@ -116,9 +122,10 @@ def set_web_ui_enabled_state(enable: bool):
             gui_callbacks['webui_status_update']("WEBUI: CFGOFF", "off")
         else:
             gui_callbacks['webui_status_update'](
-                "WEBUI: ON" if _web_ui_user_toggle_enabled else "WEBUI: PAUSED",
+                "WEBUI: ON" if _web_ui_user_toggle_enabled else "WEBUI: PAUSED", # Basic text
                 "active" if _web_ui_user_toggle_enabled else "disabled"
             )
+            # Health check will update with (SSL) or (HTTP) details periodically
 
 def _enable_webui_action(): set_web_ui_enabled_state(True)
 def _disable_webui_action(): set_web_ui_enabled_state(False)
@@ -130,21 +137,52 @@ def check_webui_health():
     if not _web_ui_user_toggle_enabled:
         return "WEBUI: PAUSED", "disabled"
 
+    protocol = "http"
+    is_ssl_successfully_configured = False
+
+    if config.ENABLE_WEB_UI_SSL:
+        # Paths in config are relative to project root. main.py is in project root.
+        cert_path = config.SSL_CERT_FILE
+        key_path = config.SSL_KEY_FILE
+        if os.path.exists(cert_path) and os.path.exists(key_path):
+            protocol = "https"
+            is_ssl_successfully_configured = True
+        else:
+            # SSL enabled in config, but files missing. Flask runs on HTTP.
+            # Health check should use HTTP.
+            logger.debug("WebUI health check: SSL configured but cert/key missing, checking via HTTP.")
+            protocol = "http" # Explicitly ensure http if files missing despite config
+            is_ssl_successfully_configured = False # Mark as not successfully configured for SSL
+
     if flask_thread_instance and flask_thread_instance.is_alive():
         try:
-            response = requests.get(f"http://localhost:{config.WEB_UI_PORT}/health", timeout=2)
+            # For self-signed certs, requests needs verify=False for HTTPS
+            verify_param = False if protocol == "https" else True
+
+            response = requests.get(
+                f"{protocol}://192.168.1.128:{config.WEB_UI_PORT}/health",
+                timeout=10,
+                verify=verify_param
+            )
             if response.status_code == 200 and response.json().get("status") == "ok":
-                return "WEBUI: ON", "active"
+                protocol_indicator = "(SSL)" if is_ssl_successfully_configured else "(HTTP)"
+                status_text = f"WEBUI: ON {protocol_indicator}"
+                return status_text, "active"
             else:
-                return "WEBUI: UNHEALTHY", "error"
+                protocol_indicator = "(SSL)" if is_ssl_successfully_configured else "(HTTP)"
+                return f"WEBUI: UNHEALTHY {protocol_indicator}", "error"
         except requests.ConnectionError:
             return "WEBUI: NO-CONN", "error"
         except requests.Timeout:
             return "WEBUI: TIMEOUT", "timeout"
+        except requests.exceptions.SSLError as ssl_e:
+            logger.warning(f"WebUI health check SSL error (is cert/key valid & for localhost/IP?): {ssl_e}")
+            return "WEBUI: SSL_ERR", "error"
         except Exception as e:
             logger.warning(f"WebUI health check failed: {e}")
             return "WEBUI: ERR", "error"
     return "WEBUI: OFF", "off"
+
 
 def set_ollama_ready_main(is_ready: bool):
     global ollama_ready
@@ -182,7 +220,6 @@ def on_gui_recording_finished(recorded_sample_rate):
                 mind_type = "ready" if ollama_ready else "error"
                 gui_callbacks['mind_status_update'](mind_text, mind_type)
     finally:
-        # This ensures the speak button is always reset to a sensible idle state after processing.
         if gui_callbacks and callable(gui_callbacks.get('speak_button_update')):
             speak_btn_ready = whisper_handler.is_whisper_ready()
             gui_callbacks['speak_button_update'](speak_btn_ready, "Speak" if speak_btn_ready else "HEAR NRDY")
@@ -301,7 +338,6 @@ def start_gui_recording():
 
     if not (whisper_handler.WHISPER_CAPABLE and whisper_handler.is_whisper_ready()):
         logger.warning("Cannot start recording: Whisper module not ready.")
-        # Button state should already reflect "HEAR NRDY" or similar
         return
     if tts_manager.is_tts_loading():
         logger.info("Cannot start recording: TTS loading.")
@@ -309,12 +345,10 @@ def start_gui_recording():
 
     tts_manager.stop_current_speech(gui_callbacks)
 
-    if audio_processor.start_recording(gui_callbacks): # gui_callbacks includes on_recording_finished
+    if audio_processor.start_recording(gui_callbacks): 
         if gui_callbacks and callable(gui_callbacks.get('speak_button_update')):
-            gui_callbacks['speak_button_update'](True, "Listening...") # Enable button, set text
+            gui_callbacks['speak_button_update'](True, "Listening...") 
     else:
-        # audio_processor.start_recording failed. It handles its own error messages (messagebox, status_update).
-        # We need to ensure the button is reset to a proper idle state.
         logger.warning("audio_processor.start_recording returned False. Resetting button to idle state.")
         if gui_callbacks and callable(gui_callbacks.get('speak_button_update')):
             speak_btn_ready_for_idle = whisper_handler.is_whisper_ready()
@@ -327,21 +361,16 @@ def stop_gui_recording_and_process():
 
     if not audio_processor.is_recording_active():
         logger.debug("Stop recording requested, but not active.")
-        # Ensure button is in a consistent idle state if somehow stop is called without active recording
         if gui_callbacks and callable(gui_callbacks.get('speak_button_update')):
             speak_btn_ready_for_idle = whisper_handler.is_whisper_ready()
             current_text = gui.speak_button.cget("text") if gui and gui.speak_button else "Speak"
-            if current_text == "Listening...": # If it was stuck on listening
+            if current_text == "Listening...": 
                  gui_callbacks['speak_button_update'](speak_btn_ready_for_idle, "Speak" if speak_btn_ready_for_idle else "HEAR NRDY")
         return
 
-    # This call will internally set audio_processor._is_recording to False,
-    # which then causes the recording thread to finish and call `on_gui_recording_finished`.
     audio_processor.stop_recording()
 
     if gui_callbacks and callable(gui_callbacks.get('speak_button_update')):
-        # Button becomes disabled and shows "Processing..."
-        # `on_gui_recording_finished` will set it to "Speak" or "HEAR NRDY" later.
         gui_callbacks['speak_button_update'](False, "Processing...")
 
 
@@ -369,6 +398,10 @@ def on_app_exit():
     if tts_manager.TTS_CAPABLE: logger.info("Shutting down TTS module..."); tts_manager.full_shutdown_tts_module()
     if whisper_handler.WHISPER_CAPABLE: logger.info("Cleaning up Whisper model..."); whisper_handler.full_shutdown_whisper_module()
 
+    # No explicit shutdown for Flask thread needed with daemon=True, but good practice if it held resources
+    # For Flask dev server, daemon=True is usually enough. Production servers have own shutdown.
+    logger.info("Flask thread is daemonized, will exit with main app.")
+
     if gui:
         logger.info("Destroying GUI window...");
         if hasattr(gui, 'destroy_window') and callable(gui.destroy_window): gui.destroy_window()
@@ -384,7 +417,7 @@ def _periodic_status_and_task_checker():
     global customer_interaction_manager_instance, llm_task_executor, app_tk_instance, gui_callbacks
 
     if config.ENABLE_WEB_UI and gui_callbacks and callable(gui_callbacks.get('webui_status_update')):
-        webui_text, webui_type = check_webui_health()
+        webui_text, webui_type = check_webui_health() # This will now reflect SSL status
         gui_callbacks['webui_status_update'](webui_text, webui_type)
 
     if customer_interaction_manager_instance and llm_task_executor and not llm_task_executor._shutdown:
@@ -451,15 +484,21 @@ if __name__ == "__main__":
     logger.info("--- Main __name__ block started ---")
     logger.info(f"DEBUG MAIN: config.ENABLE_WEB_UI is {config.ENABLE_WEB_UI}")
     logger.info(f"DEBUG MAIN: config.WEB_UI_PORT is {config.WEB_UI_PORT}")
+    logger.info(f"DEBUG MAIN: config.ENABLE_WEB_UI_SSL is {config.ENABLE_WEB_UI_SSL}")
+    if config.ENABLE_WEB_UI_SSL:
+        logger.info(f"DEBUG MAIN: SSL Cert Path: {config.SSL_CERT_FILE}")
+        logger.info(f"DEBUG MAIN: SSL Key Path: {config.SSL_KEY_FILE}")
+
 
     folders_to_ensure = [
         config.DATA_FOLDER, config.OUTPUT_FOLDER, config.TELEGRAM_VOICE_TEMP_FOLDER,
         config.TELEGRAM_TTS_TEMP_FOLDER, config.CUSTOMER_STATES_FOLDER,
         os.path.join(config.DATA_FOLDER, "temp_dashboards"),
-        config.WEB_UI_AUDIO_TEMP_FOLDER, config.WEB_UI_TTS_SERVE_FOLDER
+        config.WEB_UI_AUDIO_TEMP_FOLDER, config.WEB_UI_TTS_SERVE_FOLDER,
+        os.path.dirname(config.SSL_CERT_FILE) # Ensure SSL directory exists if specified (e.g. "ssl/")
     ]
     for folder_path in folders_to_ensure:
-        if not file_utils.ensure_folder(folder_path, gui_callbacks=None):
+        if folder_path and not file_utils.ensure_folder(folder_path, gui_callbacks=None): # Check if folder_path is not empty
             logger.critical(f"CRITICAL: Failed to create folder '{folder_path}'. Exiting.")
             sys.exit(1)
 
@@ -492,9 +531,8 @@ if __name__ == "__main__":
         logger.critical(f"CRITICAL Tkinter root init: {e_tk_root}", exc_info=True); sys.exit(1)
 
     action_callbacks_for_gui = {
-        # 'toggle_speaking_recording': toggle_speaking_recording, # Removed
-        'start_gui_recording': start_gui_recording,             # Added
-        'stop_gui_recording_and_process': stop_gui_recording_and_process, # Added
+        'start_gui_recording': start_gui_recording,           
+        'stop_gui_recording_and_process': stop_gui_recording_and_process, 
         'on_exit': on_app_exit,
         'unload_bark_model': _unload_bark_model_action, 'reload_bark_model': _reload_bark_model_action,
         'unload_whisper_model': _unload_whisper_model_action, 'reload_whisper_model': _reload_whisper_model_action,
@@ -535,7 +573,7 @@ if __name__ == "__main__":
         for cb_key, method_name in callback_mapping.items():
             if hasattr(gui, method_name) and callable(getattr(gui, method_name)):
                 gui_callbacks[cb_key] = getattr(gui, method_name)
-        gui_callbacks['on_recording_finished'] = on_gui_recording_finished # This one is special for audio_processor
+        gui_callbacks['on_recording_finished'] = on_gui_recording_finished 
     else: logger.error("GUI object is None, callbacks cannot be populated.")
 
     logger.info("Populating GUI with initial state data...")
@@ -606,14 +644,41 @@ if __name__ == "__main__":
             web_bridge_instance.telegram_handler_instance_ref = telegram_bot_handler_instance
 
         def run_flask_server_thread_target():
+            ssl_context_to_use = None
+            protocol_for_log = "http"
             try:
-                web_logger.info(f"Attempting to start Flask web server on http://0.0.0.0:{config.WEB_UI_PORT}")
-                actual_flask_app.run(host='0.0.0.0', port=config.WEB_UI_PORT, debug=False, use_reloader=False)
+                if config.ENABLE_WEB_UI_SSL:
+                    # Config paths are relative to project root. main.py runs from project root.
+                    cert_path = config.SSL_CERT_FILE
+                    key_path = config.SSL_KEY_FILE
+
+                    if os.path.exists(cert_path) and os.path.exists(key_path):
+                        ssl_context_to_use = (cert_path, key_path)
+                        protocol_for_log = "https"
+                        web_logger.info(f"SSL context prepared for Flask: Cert='{cert_path}', Key='{key_path}'")
+                    else:
+                        web_logger.warning(
+                            f"SSL for WebUI is ENABLED in config, but cert ('{cert_path}') or key ('{key_path}') NOT FOUND. "
+                            "Flask server will run on HTTP instead."
+                        )
+                
+                web_logger.info(f"Attempting to start Flask web server on {protocol_for_log}://0.0.0.0:{config.WEB_UI_PORT}")
+                actual_flask_app.run(
+                    host='0.0.0.0', 
+                    port=config.WEB_UI_PORT, 
+                    debug=False, 
+                    use_reloader=False,
+                    ssl_context=ssl_context_to_use # This will be None if SSL is not used
+                )
                 web_logger.info("Flask server has stopped.")
             except Exception as e_flask_run:
                 web_logger.critical(f"Flask server CRASHED or failed to start: {e_flask_run}", exc_info=True)
                 if gui_callbacks and callable(gui_callbacks.get('webui_status_update')):
-                    gui_callbacks['webui_status_update']("WEBUI: ERR", "error")
+                    # Update GUI status to reflect crash. Health check might also catch this.
+                    status_text, status_type = check_webui_health() # Re-check to get current state
+                    gui_callbacks['webui_status_update'](status_text if status_text else "WEBUI: ERR-START", 
+                                                         status_type if status_type else "error")
+
 
         flask_thread_instance = threading.Thread(target=run_flask_server_thread_target, daemon=True, name="FlaskWebUIServerThread")
         flask_thread_instance.start()
@@ -641,7 +706,7 @@ if __name__ == "__main__":
 
     if app_tk_instance and hasattr(app_tk_instance, 'winfo_exists') and app_tk_instance.winfo_exists():
         app_tk_instance.after(300, _process_queued_admin_llm_messages)
-        app_tk_instance.after(1000, _periodic_status_and_task_checker) # Initial call after 1 sec
+        app_tk_instance.after(1000, _periodic_status_and_task_checker) 
     else: logger.error("Tkinter instance not available for scheduling periodic tasks.")
 
     logger.info("Starting Tkinter mainloop...")

@@ -26,6 +26,15 @@ WEB_UI_PORT = int(os.getenv("WEB_UI_PORT", "8080"))
 PYDUB_AVAILABLE_FOR_WEB_CONVERSION = os.getenv("PYDUB_AVAILABLE_FOR_WEB_CONVERSION", "True").lower() == "true"
 
 
+# --- SSL Configuration for Web UI ---
+# Enables HTTPS for the Web UI. Requires SSL_CERT_FILE and SSL_KEY_FILE to be valid.
+ENABLE_WEB_UI_SSL = os.getenv("ENABLE_WEB_UI_SSL", "True").lower() == "true"
+# Path to the SSL certificate file (e.g., cert.pem), relative to the project root.
+SSL_CERT_FILE = os.getenv("SSL_CERT_FILE", "ssl/cert.pem")
+# Path to the SSL private key file (e.g., key.pem), relative to the project root.
+SSL_KEY_FILE = os.getenv("SSL_KEY_FILE", "ssl/key.pem")
+
+
 # --- Ollama ---
 OLLAMA_API_URL = os.getenv("OLLAMA_API_URL", "http://localhost:11434/api/generate")
 OLLAMA_MODEL_NAME = "phi4"
