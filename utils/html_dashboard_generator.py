@@ -112,7 +112,7 @@ HTML_DASHBOARD_TEMPLATE = """
 def get_status_css_class(status_type_str: str) -> str:
     """ Maps a status type string (e.g., 'ready', 'error') to a CSS class. """
     status_type_str = status_type_str.lower() # Normalize
-    if status_type_str in ["ready", "polling", "loaded", "saved", "fresh", "idle", "ok_gpu"]:
+    if status_type_str in ["ready", "polling", "loaded", "saved", "fresh", "idle", "ok_gpu", "active"]:
         return "status-ok"
     elif status_type_str in ["loading", "checking", "pinging", "thinking"]:
         return "status-warn"
