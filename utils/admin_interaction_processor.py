@@ -42,8 +42,8 @@ def handle_admin_llm_interaction(
 
     assistant_response_text_llm = "Error: LLM processing did not complete."
     selected_bark_voice_preset = config.BARK_VOICE_PRESET_EN
-    ollama_error_occurred = False # Flag for error during *this* LLM call
-    ollama_error_message_str = "" # Holds the actual error string from call_ollama_for_chat_response
+    ollama_error_occurred = False 
+    ollama_error_message_str = "" 
     current_lang_code_for_state = "en"
 
     try:
@@ -118,14 +118,14 @@ def handle_admin_llm_interaction(
         if detected_language_code: current_turn_for_history[f"detected_language_code_for_{source}_display"] = detected_language_code
         
         with global_states_lock_ref:
-            if ollama_error_message_str: # If there was an error message string from call_ollama_for_chat_response
+            if ollama_error_message_str: 
                 ollama_error_occurred = True
                 assistant_response_text_llm = "An internal error occurred (admin)."
                 if current_lang_code_for_state == "ru": assistant_response_text_llm = "Произошла внутренняя ошибка (админ)."
                 current_turn_for_history["assistant"] = f"[LLM Error ({source}): {assistant_response_text_llm}]"
                 if gui_callbacks and callable(gui_callbacks.get('add_assistant_message_to_display')):
                     gui_callbacks['add_assistant_message_to_display'](assistant_response_text_llm, is_error=True, source=f"{source}_error")
-            else: # Success, ollama_data is the dict from LLM
+            else: 
                 assistant_response_text_llm = ollama_data.get("answer_to_user", "Error: No LLM answer.")
                 
                 llm_provided_user_state_changes = ollama_data.get("updated_user_state", {})
@@ -150,6 +150,12 @@ def handle_admin_llm_interaction(
                             gui_callbacks['apply_chat_font_size'](clamped_font_size_suggestion)
                         applied_font_size_value = clamped_font_size_suggestion
                     llm_provided_user_state_changes["chat_font_size"] = applied_font_size_value
+                    
+                    # Ensure 'todos' is not part of the update from LLM for admin state
+                    if "todos" in llm_provided_user_state_changes:
+                        del llm_provided_user_state_changes["todos"]
+                        logger.warning(f"ADMIN_LLM_FLOW ({source}): LLM tried to update 'todos' for admin state. This key is ignored.")
+
                     merged_user_state = user_state_snapshot_for_prompt.copy()
                     merged_user_state.update(llm_provided_user_state_changes)
                     user_state_ref.clear(); user_state_ref.update(merged_user_state)
@@ -159,34 +165,52 @@ def handle_admin_llm_interaction(
                 llm_provided_assistant_state_changes = ollama_data.get("updated_assistant_state", {})
                 if isinstance(llm_provided_assistant_state_changes, dict):
                     merged_assistant_state = assistant_state_snapshot_for_prompt.copy()
+                    
+                    # Handle internal_tasks: pending and completed only
                     if "internal_tasks" in llm_provided_assistant_state_changes and isinstance(llm_provided_assistant_state_changes["internal_tasks"], dict):
                         llm_tasks_dict = llm_provided_assistant_state_changes["internal_tasks"]
+                        
                         if "internal_tasks" not in merged_assistant_state or not isinstance(merged_assistant_state.get("internal_tasks"), dict):
-                            merged_assistant_state["internal_tasks"] = {"pending": [], "in_process": [], "completed": []}
-                        for task_type in ["pending", "in_process", "completed"]:
-                            if task_type not in merged_assistant_state["internal_tasks"] or not isinstance(merged_assistant_state["internal_tasks"][task_type], list):
+                            merged_assistant_state["internal_tasks"] = {"pending": [], "completed": []}
+                        
+                        for task_type in ["pending", "completed"]: # Only process these two
+                            if task_type not in merged_assistant_state["internal_tasks"] or not isinstance(merged_assistant_state["internal_tasks"].get(task_type), list):
                                 merged_assistant_state["internal_tasks"][task_type] = []
+                            
                             new_tasks_from_llm = llm_tasks_dict.get(task_type, [])
-                            if not isinstance(new_tasks_from_llm, list): new_tasks_from_llm = [str(new_tasks_from_llm)]
+                            if not isinstance(new_tasks_from_llm, list): 
+                                new_tasks_from_llm = [str(new_tasks_from_llm)] if new_tasks_from_llm else []
+                            
                             existing_tasks_in_merged = merged_assistant_state["internal_tasks"][task_type]
                             merged_assistant_state["internal_tasks"][task_type] = list(dict.fromkeys(
                                 [str(t) for t in existing_tasks_in_merged] + [str(t) for t in new_tasks_from_llm]
                             ))
+                        if "in_process" in llm_tasks_dict:
+                             logger.warning(f"ADMIN_LLM_FLOW ({source}): LLM provided 'in_process' tasks. This key is now ignored for assistant state. Tasks: {llm_tasks_dict['in_process']}")
+                    
+                    # Update other assistant state keys
                     for key, val_llm in llm_provided_assistant_state_changes.items():
-                        if key != "internal_tasks": merged_assistant_state[key] = val_llm
+                        if key != "internal_tasks": 
+                            merged_assistant_state[key] = val_llm
+                            
                     merged_assistant_state["last_used_language"] = current_lang_code_for_state
                     assistant_state_ref.clear(); assistant_state_ref.update(merged_assistant_state)
                 else:
                      logger.warning(f"ADMIN_LLM_FLOW ({source}): updated_assistant_state from LLM was not a dict. Assistant state not modified by LLM this turn.")
 
                 if gui_callbacks:
-                    if callable(gui_callbacks.get('update_todo_list')): gui_callbacks['update_todo_list'](user_state_ref.get("todos", []))
-                    if callable(gui_callbacks.get('update_calendar_events_list')): gui_callbacks['update_calendar_events_list'](user_state_ref.get("calendar_events", []))
+                    # Removed update_todo_list for admin
+                    if callable(gui_callbacks.get('update_calendar_events_list')): 
+                        gui_callbacks['update_calendar_events_list'](user_state_ref.get("calendar_events", []))
+                    
                     asst_tasks = assistant_state_ref.get("internal_tasks", {});
-                    if not isinstance(asst_tasks, dict): asst_tasks = {} 
-                    if callable(gui_callbacks.get('update_kanban_pending')): gui_callbacks['update_kanban_pending'](asst_tasks.get("pending", []))
-                    if callable(gui_callbacks.get('update_kanban_in_process')): gui_callbacks['update_kanban_in_process'](asst_tasks.get("in_process", []))
-                    if callable(gui_callbacks.get('update_kanban_completed')): gui_callbacks['update_kanban_completed'](asst_tasks.get("completed", []))
+                    if not isinstance(asst_tasks, dict): asst_tasks = {"pending": [], "completed": []}
+                    
+                    if callable(gui_callbacks.get('update_kanban_pending')): 
+                        gui_callbacks['update_kanban_pending'](asst_tasks.get("pending", []))
+                    # Removed update_kanban_in_process
+                    if callable(gui_callbacks.get('update_kanban_completed')): 
+                        gui_callbacks['update_kanban_completed'](asst_tasks.get("completed", []))
 
                 updated_customer_state_from_llm = ollama_data.get("updated_active_customer_state")
                 if updated_customer_state_from_llm and isinstance(updated_customer_state_from_llm, dict) and target_customer_id_for_prompt:
@@ -206,7 +230,6 @@ def handle_admin_llm_interaction(
                 chat_history_ref[:] = updated_chat_history
             if gui_callbacks and callable(gui_callbacks.get('memory_status_update')): gui_callbacks['memory_status_update']("MEM: SAVED", "saved")
 
-        # TTS / Telegram reply logic
         if source == "gui" and tts_manager_module_ref.is_tts_ready() and not ollama_error_occurred:
             def _deferred_gui_display():
                  if gui_callbacks and callable(gui_callbacks.get('status_update')):
@@ -237,30 +260,27 @@ def handle_admin_llm_interaction(
                 asyncio.run_coroutine_threadsafe( telegram_bot_handler_instance_ref.send_text_message_to_user(admin_id_int, err_text_for_tg), telegram_bot_handler_instance_ref.async_loop).result(timeout=10)
             except Exception as e_tg_err_send: logger.error(f"Failed to send LLM error to admin TG: {e_tg_err_send}")
 
-        # --- Final GUI Status Updates (Mind and Overall App Status) ---
         if gui_callbacks:
-            # Update MIND status
             if callable(gui_callbacks.get('mind_status_update')):
                 if ollama_error_occurred:
                     short_code, status_type = _parse_ollama_error_to_short_code(ollama_error_message_str)
                     gui_callbacks['mind_status_update'](f"MIND: {short_code.upper()}", status_type)
-                elif ollama_ready_flag: # ollama_ready_flag is the general readiness before this call
+                elif ollama_ready_flag: 
                     gui_callbacks['mind_status_update']("MIND: RDY", "ready")
-                else: # ollama was not generally ready (e.g. initial ping failed)
+                else: 
                     gui_callbacks['mind_status_update']("MIND: NRDY", "error")
 
-            # Update Overall App Status, only if GUI TTS isn't going to update it
             if callable(gui_callbacks.get('status_update')):
                 will_gui_tts_update_status = False
                 if source == "gui" and tts_manager_module_ref.is_tts_ready() and not ollama_error_occurred:
-                    will_gui_tts_update_status = True # TTS callback will set "Speaking..."
+                    will_gui_tts_update_status = True 
 
                 if not will_gui_tts_update_status:
-                    final_app_status_text = "Error processing." # Default
+                    final_app_status_text = "Error processing." 
                     if not ollama_error_occurred and ollama_ready_flag:
                         current_admin_name_for_status = "Partner"
                         current_persona_name_for_status = "Iri-shka"
-                        with global_states_lock_ref: # Read potentially updated names
+                        with global_states_lock_ref: 
                             current_admin_name_for_status = assistant_state_ref.get("admin_name", "Partner")
                             current_persona_name_for_status = assistant_state_ref.get("persona_name", "Iri-shka")
                         
@@ -268,18 +288,17 @@ def handle_admin_llm_interaction(
                             response_snippet = assistant_response_text_llm[:60]
                             if len(assistant_response_text_llm) > 60: response_snippet += "..."
                             final_app_status_text = f"{current_persona_name_for_status} to {current_admin_name_for_status}: {response_snippet}"
-                        # If assistant_response_text_llm is an error message (e.g. from LLM itself or "An internal error..."), show it.
                         elif assistant_response_text_llm:
                              final_app_status_text = f"{current_persona_name_for_status} says: {assistant_response_text_llm[:60]}..."
-                        else: # Should ideally not happen if ollama_error_occurred is false
+                        else: 
                              final_app_status_text = "Ready."
                     
-                    elif ollama_error_occurred: # Error during this specific LLM call
+                    elif ollama_error_occurred: 
                         short_code, _ = _parse_ollama_error_to_short_code(ollama_error_message_str)
                         final_app_status_text = f"LLM Error: {short_code.upper()}"
                     
-                    elif not ollama_ready_flag: # Ollama wasn't ready to begin with
-                        final_app_status_text = "LLM Not Ready." # or use initial check's error
+                    elif not ollama_ready_flag: 
+                        final_app_status_text = "LLM Not Ready." 
                     
                     gui_callbacks['status_update'](final_app_status_text)
     finally:
@@ -314,7 +333,6 @@ def process_gui_recorded_audio(
 
         if not (whisper_handler_module_ref.WHISPER_CAPABLE and whisper_handler_module_ref.is_whisper_ready()):
             if gui_callbacks and callable(gui_callbacks.get('status_update')): gui_callbacks['status_update']("Hearing NRDY.")
-            # MIND status should also be updated if Whisper fails, as no LLM call will happen.
             if gui_callbacks and callable(gui_callbacks.get('mind_status_update')):
                  current_mind_status_text = "MIND: RDY" if ollama_ready_flag else "MIND: NRDY"
                  current_mind_status_type = "ready" if ollama_ready_flag else "error"
@@ -336,7 +354,7 @@ def process_gui_recorded_audio(
                 ollama_handler_module_ref=ollama_handler_module_ref, state_manager_module_ref=state_manager_module_ref,
                 tts_manager_module_ref=tts_manager_module_ref,
                 telegram_messaging_utils_module_ref=telegram_messaging_utils_module_ref,
-                ollama_ready_flag=ollama_ready_flag # This is the general readiness
+                ollama_ready_flag=ollama_ready_flag 
             )
         elif not transcribed_text and not trans_err: 
             lang_for_err_gui = "en"
@@ -345,7 +363,6 @@ def process_gui_recorded_audio(
             if gui_callbacks and callable(gui_callbacks.get('add_user_message_to_display')): gui_callbacks['add_user_message_to_display']("[Silent/Unclear Audio]", source="gui")
             if gui_callbacks and callable(gui_callbacks.get('add_assistant_message_to_display')): gui_callbacks['add_assistant_message_to_display'](err_msg_stt_gui, is_error=False, source="gui") 
             if gui_callbacks and callable(gui_callbacks.get('status_update')): gui_callbacks['status_update'](err_msg_stt_gui)
-            # Reset MIND status as LLM was not called
             if gui_callbacks and callable(gui_callbacks.get('mind_status_update')):
                  current_mind_status_text = "MIND: RDY" if ollama_ready_flag else "MIND: NRDY"
                  current_mind_status_type = "ready" if ollama_ready_flag else "error"
@@ -362,7 +379,6 @@ def process_gui_recorded_audio(
              if gui_callbacks and callable(gui_callbacks.get('add_user_message_to_display')): gui_callbacks['add_user_message_to_display']("[Transcription Error]", source="gui")
              if gui_callbacks and callable(gui_callbacks.get('add_assistant_message_to_display')): gui_callbacks['add_assistant_message_to_display'](err_msg_stt_gui, is_error=True, source="gui")
              if gui_callbacks and callable(gui_callbacks.get('status_update')): gui_callbacks['status_update'](f"Transcription Error: {trans_err or 'Unknown'}")
-             # Reset MIND status
              if gui_callbacks and callable(gui_callbacks.get('mind_status_update')):
                  current_mind_status_text = "MIND: RDY" if ollama_ready_flag else "MIND: NRDY"
                  current_mind_status_type = "ready" if ollama_ready_flag else "error"
@@ -372,7 +388,6 @@ def process_gui_recorded_audio(
         if not llm_called: 
             if gui_callbacks and callable(gui_callbacks.get('act_status_update')):
                 gui_callbacks['act_status_update']("ACT: IDLE", "idle")
-        # The speak button update is handled by the caller in main.py's on_gui_recording_finished to reflect Whisper readiness
 
 
 def process_admin_telegram_text_message(
@@ -385,8 +400,6 @@ def process_admin_telegram_text_message(
     if gui_callbacks and callable(gui_callbacks.get('add_user_message_to_display')):
         gui_callbacks['add_user_message_to_display'](text_message, source="telegram_admin")
 
-    # For Telegram interactions, ACT status is not directly applicable in the GUI in the same way.
-    # MIND and overall app status will be updated by handle_admin_llm_interaction.
     handle_admin_llm_interaction(
         input_text=text_message, source="telegram_admin", detected_language_code=None,
         chat_history_ref=chat_history_ref, user_state_ref=user_state_ref, assistant_state_ref=assistant_state_ref,
@@ -411,7 +424,6 @@ def process_admin_telegram_voice_message(
             logger.error("Cannot process admin voice: Whisper not ready or load_audio missing.")
             if telegram_bot_handler_instance_ref and telegram_bot_handler_instance_ref.async_loop:
                  asyncio.run_coroutine_threadsafe(telegram_bot_handler_instance_ref.send_text_message_to_user(user_id, "Error: Voice processing module (Whisper) is not ready."), telegram_bot_handler_instance_ref.async_loop)
-            # Update GUI MIND status if Whisper fails here for a Telegram voice message
             if gui_callbacks and callable(gui_callbacks.get('mind_status_update')):
                  current_mind_status_text = "MIND: RDY" if ollama_ready_flag else "MIND: NRDY"
                  current_mind_status_type = "ready" if ollama_ready_flag else "error"
@@ -444,7 +456,6 @@ def process_admin_telegram_voice_message(
              if gui_callbacks and callable(gui_callbacks.get('add_user_message_to_display')):
                 gui_callbacks['add_user_message_to_display']("[Silent/Unclear Audio from Admin TG]", source="telegram_voice_admin")
              if gui_callbacks and callable(gui_callbacks.get('status_update')): gui_callbacks['status_update']("Admin TG: No speech detected.")
-             # Reset MIND status
              if gui_callbacks and callable(gui_callbacks.get('mind_status_update')):
                  current_mind_status_text = "MIND: RDY" if ollama_ready_flag else "MIND: NRDY"
                  current_mind_status_type = "ready" if ollama_ready_flag else "error"
@@ -456,7 +467,6 @@ def process_admin_telegram_voice_message(
             if gui_callbacks and callable(gui_callbacks.get('add_user_message_to_display')):
                 gui_callbacks['add_user_message_to_display'](f"[Transcription Error from Admin TG: {trans_err}]", source="telegram_voice_admin")
             if gui_callbacks and callable(gui_callbacks.get('status_update')): gui_callbacks['status_update'](f"Admin TG Voice Error: {trans_err or 'Recognition error.'}")
-            # Reset MIND status
             if gui_callbacks and callable(gui_callbacks.get('mind_status_update')):
                  current_mind_status_text = "MIND: RDY" if ollama_ready_flag else "MIND: NRDY"
                  current_mind_status_type = "ready" if ollama_ready_flag else "error"
@@ -466,9 +476,8 @@ def process_admin_telegram_voice_message(
     except Exception as e:
         logger.error(f"Error processing admin voice WAV {wav_filepath}: {e}", exc_info=True)
         if gui_callbacks and callable(gui_callbacks.get('status_update')): gui_callbacks['status_update']("Error processing admin voice.")
-        # Reset MIND status
         if gui_callbacks and callable(gui_callbacks.get('mind_status_update')):
-             current_mind_status_text = "MIND: RDY" if ollama_ready_flag else "MIND: NRDY" # Default to ready if ollama itself is okay
+             current_mind_status_text = "MIND: RDY" if ollama_ready_flag else "MIND: NRDY" 
              current_mind_status_type = "ready" if ollama_ready_flag else "error"
              gui_callbacks['mind_status_update'](current_mind_status_text, current_mind_status_type)
         if telegram_bot_handler_instance_ref and telegram_bot_handler_instance_ref.async_loop:

@@ -4,9 +4,8 @@ import datetime
 from datetime import timezone, timedelta # Correct import
 import config # For TIMEZONE_OFFSET_HOURS
 
-# logger could be added here if needed for this module
 # from logger import get_logger
-# logger = get_logger("Iri-shka_App.utils.HTMLDashboardGenerator")
+# logger = get_logger("Iri-shka_App.utils.HTMLDashboardGenerator") # Uncomment if logging is needed here
 
 
 HTML_DASHBOARD_TEMPLATE = """
@@ -26,16 +25,16 @@ HTML_DASHBOARD_TEMPLATE = """
         .section {{ margin-bottom: 25px; }}
         .status-grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 12px; margin-bottom:15px; }}
         .status-box {{ padding: 12px 8px; border-radius: 6px; text-align: center; font-weight: 500; color: white; font-size: 0.9em; box-shadow: 0 1px 2px rgba(0,0,0,0.05);}}
-        .status-ok {{ background-color: #42b72a; }} /* Green */
+        .status-ok, .status-active {{ background-color: #42b72a; }} /* Green for OK and Active states */
         .status-warn {{ background-color: #ffc107; color: #333;}} /* Amber */
         .status-error {{ background-color: #f02849; }} /* Red */
-        .status-off {{ background-color: #adb5bd; }} /* Grey */
+        .status-off, .status-disabled {{ background-color: #adb5bd; }} /* Grey for OFF and Disabled states */
         .status-info {{ background-color: #1877f2; }} /* Blue */
         .app-overall-status {{ font-weight: bold; font-size: 1.1em; padding: 10px; background-color: #e7f3ff; border-left: 4px solid #1877f2; margin-top: 10px; border-radius: 4px;}}
         ul {{ list-style-type: none; padding-left: 0; margin-top: 5px; }}
         li {{ background-color: #f0f2f5; margin-bottom: 6px; padding: 10px; border-radius: 4px; font-size: 0.95em; border: 1px solid #ddd; }}
         li strong {{ color: #1877f2; }}
-        .kanban-section {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;}}
+        .kanban-section {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px;}}
         .kanban-column h3 {{ margin-top: 0; font-size: 1.1em; color: #4b4f56; padding-bottom: 5px; border-bottom: 1px solid #ccd0d5; }}
         .chat-turn strong {{ display: block; margin-bottom: 3px; color: #333;}}
         .chat-turn .admin {{ color: #1877f2; }}
@@ -69,31 +68,23 @@ HTML_DASHBOARD_TEMPLATE = """
 
         <div class="section">
             <h2>Admin's Info ({admin_name})</h2>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
-                <div>
-                    <h3>Next Calendar Events</h3>
-                    <ul>{admin_calendar_events_html}</ul>
-                </div>
-                <div>
-                    <h3>Pending Todos</h3>
-                    <ul>{admin_todos_html}</ul>
-                </div>
+            <div>
+                <h3>Next Calendar Events</h3>
+                <ul>{admin_calendar_events_html}</ul>
             </div>
+            <!-- Admin Todos Removed -->
         </div>
 
         <div class="section">
             <h2>Iri-shka's Internal Tasks</h2>
             <div class="kanban-section">
                 <div class="kanban-column">
-                    <h3>Pending</h3>
+                    <h3>Pending Tasks</h3>
                     <ul>{assistant_kanban_pending_html}</ul>
                 </div>
+                <!-- In Process Column Removed -->
                 <div class="kanban-column">
-                    <h3>In Process</h3>
-                    <ul>{assistant_kanban_in_process_html}</ul>
-                </div>
-                <div class="kanban-column">
-                    <h3>Completed (Recent)</h3>
+                    <h3>Completed Tasks (Recent)</h3>
                     <ul>{assistant_kanban_completed_html}</ul>
                 </div>
             </div>
@@ -112,14 +103,14 @@ HTML_DASHBOARD_TEMPLATE = """
 def get_status_css_class(status_type_str: str) -> str:
     """ Maps a status type string (e.g., 'ready', 'error') to a CSS class. """
     status_type_str = status_type_str.lower() # Normalize
-    if status_type_str in ["ready", "polling", "loaded", "saved", "fresh", "idle", "ok_gpu", "active"]:
-        return "status-ok"
-    elif status_type_str in ["loading", "checking", "pinging", "thinking"]:
+    if status_type_str in ["ready", "polling", "loaded", "saved", "fresh", "idle", "ok_gpu", "active", "healthy"]: # Added "active" and "healthy" here
+        return "status-ok" # This will make "active" green due to CSS rule for .status-ok
+    elif status_type_str in ["loading", "checking", "pinging", "thinking", "busy"]:
         return "status-warn"
-    elif status_type_str in ["error", "na", "timeout", "conn_error", "http_502", "http_other", "initfail", "unreachable", "bad_token", "net_error", "err"]: # Added "err"
+    elif status_type_str in ["error", "na", "timeout", "conn_error", "http_502", "http_other", "initfail", "unreachable", "bad_token", "net_error", "err", "ssl_err", "unhealthy", "no-conn", "err-chk"]:
         return "status-error"
-    elif status_type_str == "off":
-        return "status-off"
+    elif status_type_str in ["off", "disabled"]: # Grouped off and disabled (e.g. WebUI PAUSED)
+        return "status-off" # This will make "disabled" grey due to CSS rule for .status-off
     return "status-info" # Default for unknown or other types like "n/a"
 
 def generate_dashboard_html(
@@ -138,25 +129,28 @@ def generate_dashboard_html(
         generation_ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC") + f" (Error getting local tz: {e_ts})"
 
 
-    def format_list_to_html(items_list, max_items=3, empty_message="<li>None</li>"):
+    def format_list_to_html(items_list, max_items=5, empty_message="<li>None</li>"):
         if not items_list: return empty_message
-        return "".join([f"<li>{str(item)[:100].replace('<','<').replace('>','>')}</li>" for item in items_list[:max_items]])
+        return "".join([f"<li>{str(item)[:150].replace('<','<').replace('>','>')}</li>" for item in items_list[:max_items]])
 
-    def format_calendar_events_to_html(events, max_items=3):
+    def format_calendar_events_to_html(events, max_items=5):
         if not events: return "<li>No upcoming events</li>"
         html_items = []
         try:
+            # Ensure all items are dicts before trying to sort
+            valid_events = [e for e in events if isinstance(e, dict)]
             sorted_events = sorted(
-                events, 
+                valid_events, 
                 key=lambda x: (
                     str(x.get("date", "9999-99-99")), 
                     str(x.get("time", "99:99"))
                 )
             )
         except TypeError: 
-            sorted_events = events 
+            # Fallback if items are not dicts or sorting fails for other reasons
+            sorted_events = [e for e in events if isinstance(e, dict)] # just filter, don't sort
+        
         for event in sorted_events[:max_items]:
-            # Try 'description', then 'name', then default to 'Event'
             desc = str(event.get("description") or event.get("name") or "Event")[:100].replace('<','<').replace('>','>')
             date_str = str(event.get("date", ""))
             time_str = str(event.get("time", ""))
@@ -166,7 +160,7 @@ def generate_dashboard_html(
     def format_chat_history_to_html(history, max_turns=3):
         if not history: return "<li>No recent messages</li>"
         html_items = []
-        for turn in history[-max_turns:]: # Get last N turns
+        for turn in history[-max_turns:]: 
             user_msg = str(turn.get("user", ""))[:150].replace('<','<').replace('>','>')
             asst_msg = str(turn.get("assistant", ""))[:150].replace('<','<').replace('>','>')
             item_html = "<li class='chat-turn'>"
@@ -178,39 +172,47 @@ def generate_dashboard_html(
             html_items.append(item_html)
         return "".join(html_items)
 
-    assistant_tasks = assistant_state_snapshot.get("internal_tasks", {})
-    if not isinstance(assistant_tasks, dict): assistant_tasks = {} 
+    assistant_tasks_from_state = assistant_state_snapshot.get("internal_tasks", {})
+    if not isinstance(assistant_tasks_from_state, dict): 
+        assistant_tasks_for_html = {"pending": [], "completed": []}
+    else:
+        assistant_tasks_for_html = {
+            "pending": assistant_tasks_from_state.get("pending", []),
+            "completed": assistant_tasks_from_state.get("completed", [])
+        }
+
     
     if not isinstance(component_statuses, dict): component_statuses = {}
 
-    def get_comp_status_text(key, default_prefix):
-        return component_statuses.get(key, (f"{default_prefix}: N/A", "unknown"))[0]
-    def get_comp_status_class(key):
-        return get_status_css_class(component_statuses.get(key, ("", "unknown"))[1])
+    def get_comp_status_text_and_type(key, default_prefix):
+        status_tuple = component_statuses.get(key, (f"{default_prefix}: N/A", "unknown"))
+        text = str(status_tuple[0]) if isinstance(status_tuple, (list, tuple)) and len(status_tuple) > 0 else f"{default_prefix}: N/A"
+        type_str = str(status_tuple[1]) if isinstance(status_tuple, (list, tuple)) and len(status_tuple) > 1 else "unknown"
+        return text, type_str
+
+    comp_status_data = {}
+    for key, prefix in [
+        ("act", "ACT"), ("inet", "INET"), ("webui", "WEBUI"), ("tele", "TELE"),
+        ("mem", "MEM"), ("hear", "HEAR"), ("voice", "VOICE"), ("mind", "MIND"),
+        ("vis", "VIS"), ("art", "ART")
+    ]:
+        text, type_str = get_comp_status_text_and_type(key, prefix)
+        comp_status_data[f"{key}_status_text"] = text.replace('<','<').replace('>','>')
+        comp_status_data[f"{key}_status_class"] = get_status_css_class(type_str)
+
 
     template_data = {
         "generation_timestamp": generation_ts,
-        "admin_name": str(admin_user_state.get("name", "Admin")).replace('<','<').replace('>','>'), # Escape name
+        "admin_name": str(admin_user_state.get("name", "Admin")).replace('<','<').replace('>','>'),
         
-        "act_status_text": get_comp_status_text("act", "ACT"), "act_status_class": get_comp_status_class("act"),
-        "inet_status_text": get_comp_status_text("inet", "INET"), "inet_status_class": get_comp_status_class("inet"),
-        "webui_status_text": get_comp_status_text("webui", "WEBUI"), "webui_status_class": get_comp_status_class("webui"),
-        "tele_status_text": get_comp_status_text("tele", "TELE"), "tele_status_class": get_comp_status_class("tele"),
-        "mem_status_text": get_comp_status_text("mem", "MEM"), "mem_status_class": get_comp_status_class("mem"),
-        "hear_status_text": get_comp_status_text("hear", "HEAR"), "hear_status_class": get_comp_status_class("hear"),
-        "voice_status_text": get_comp_status_text("voice", "VOICE"), "voice_status_class": get_comp_status_class("voice"),
-        "mind_status_text": get_comp_status_text("mind", "MIND"), "mind_status_class": get_comp_status_class("mind"),
-        "vis_status_text": get_comp_status_text("vis", "VIS"), "vis_status_class": get_comp_status_class("vis"),
-        "art_status_text": get_comp_status_text("art", "ART"), "art_status_class": get_comp_status_class("art"),
+        **comp_status_data,
 
         "app_overall_status": str(app_overall_status).replace('<','<').replace('>','>'),
         
         "admin_calendar_events_html": format_calendar_events_to_html(admin_user_state.get("calendar_events", [])),
-        "admin_todos_html": format_list_to_html(admin_user_state.get("todos", [])),
         
-        "assistant_kanban_pending_html": format_list_to_html(assistant_tasks.get("pending", [])),
-        "assistant_kanban_in_process_html": format_list_to_html(assistant_tasks.get("in_process", [])),
-        "assistant_kanban_completed_html": format_list_to_html(assistant_tasks.get("completed", [])[-3:], empty_message="<li>No recent completed tasks</li>"),
+        "assistant_kanban_pending_html": format_list_to_html(assistant_tasks_for_html.get("pending", [])),
+        "assistant_kanban_completed_html": format_list_to_html(assistant_tasks_for_html.get("completed", [])[-5:], empty_message="<li>No recent completed tasks</li>"),
         
         "admin_recent_chat_html": format_chat_history_to_html(admin_chat_history)
     }

@@ -17,7 +17,7 @@ import requests # For WebUI health check
 try:
     import logger as app_logger_module
     logger = app_logger_module.get_logger("Iri-shka_App.Main")
-    web_logger = app_logger_module.get_logger("Iri-shka_App.WebApp") # web_logger for WebApp related logs from main
+    web_logger = app_logger_module.get_logger("Iri-shka_App.WebApp") 
 except ImportError as e:
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', stream=sys.stderr)
     logger = logging.getLogger("Iri-shka_App.Main_Fallback"); web_logger = logging.getLogger("Iri-shka_App.WebApp_Fallback")
@@ -25,9 +25,6 @@ except ImportError as e:
 
 logger.info("--- APPLICATION MAIN.PY ENTRY POINT ---")
 
-# Determine project root for resolving SSL file paths if needed, assuming main.py is at the root
-# However, config paths are relative to project root, and os.path.exists will use current working directory
-# which should be project root when running main.py
 project_root_dir = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -84,14 +81,14 @@ if whisper_handler.WHISPER_CAPABLE:
     except ImportError:
         logger.warning("Failed to import OpenAI whisper module in main.py; Admin Telegram voice WAV loading might fail.")
 
-gui: GUIManager = None # type: ignore
-app_tk_instance: tk.Tk = None # type: ignore
-_active_gpu_monitor: gpu_monitor.GPUMonitor = None # type: ignore
-telegram_bot_handler_instance: TelegramBotHandler = None # type: ignore
-customer_interaction_manager_instance: CustomerInteractionManager = None # type: ignore
+gui: GUIManager = None 
+app_tk_instance: tk.Tk = None 
+_active_gpu_monitor: gpu_monitor.GPUMonitor = None 
+telegram_bot_handler_instance: TelegramBotHandler = None 
+customer_interaction_manager_instance: CustomerInteractionManager = None 
 admin_llm_message_queue = queue.Queue()
-llm_task_executor: ThreadPoolExecutor = None # type: ignore
-flask_thread_instance: threading.Thread = None # type: ignore # To keep a reference to the Flask thread
+llm_task_executor: ThreadPoolExecutor = None 
+flask_thread_instance: threading.Thread = None 
 
 chat_history: list = []
 user_state: dict = {}
@@ -122,10 +119,9 @@ def set_web_ui_enabled_state(enable: bool):
             gui_callbacks['webui_status_update']("WEBUI: CFGOFF", "off")
         else:
             gui_callbacks['webui_status_update'](
-                "WEBUI: ON" if _web_ui_user_toggle_enabled else "WEBUI: PAUSED", # Basic text
+                "WEBUI: ON" if _web_ui_user_toggle_enabled else "WEBUI: PAUSED", 
                 "active" if _web_ui_user_toggle_enabled else "disabled"
             )
-            # Health check will update with (SSL) or (HTTP) details periodically
 
 def _enable_webui_action(): set_web_ui_enabled_state(True)
 def _disable_webui_action(): set_web_ui_enabled_state(False)
@@ -141,26 +137,21 @@ def check_webui_health():
     is_ssl_successfully_configured = False
 
     if config.ENABLE_WEB_UI_SSL:
-        # Paths in config are relative to project root. main.py is in project root.
         cert_path = config.SSL_CERT_FILE
         key_path = config.SSL_KEY_FILE
         if os.path.exists(cert_path) and os.path.exists(key_path):
             protocol = "https"
             is_ssl_successfully_configured = True
         else:
-            # SSL enabled in config, but files missing. Flask runs on HTTP.
-            # Health check should use HTTP.
             logger.debug("WebUI health check: SSL configured but cert/key missing, checking via HTTP.")
-            protocol = "http" # Explicitly ensure http if files missing despite config
-            is_ssl_successfully_configured = False # Mark as not successfully configured for SSL
+            protocol = "http" 
+            is_ssl_successfully_configured = False 
 
     if flask_thread_instance and flask_thread_instance.is_alive():
         try:
-            # For self-signed certs, requests needs verify=False for HTTPS
             verify_param = False if protocol == "https" else True
-
             response = requests.get(
-                f"{protocol}://192.168.1.128:{config.WEB_UI_PORT}/health",
+                f"{protocol}://127.0.0.1:{config.WEB_UI_PORT}/health", # Changed to 127.0.0.1 for local health check
                 timeout=10,
                 verify=verify_param
             )
@@ -214,9 +205,9 @@ def on_gui_recording_finished(recorded_sample_rate):
             if callable(gui_callbacks.get('messagebox_error')):
                 gui_callbacks['messagebox_error']("Processing Error", f"A critical error occurred while processing audio: {e}")
             if callable(gui_callbacks.get('act_status_update')):
-                gui_callbacks['act_status_update']("ACT: IDLE", "idle") # Reset ACT status
-            if callable(gui_callbacks.get('mind_status_update')): # Reset MIND status
-                mind_text = "MIND: RDY" if ollama_ready else "MIND: ERR-CHK" # Indicate ready or check error
+                gui_callbacks['act_status_update']("ACT: IDLE", "idle") 
+            if callable(gui_callbacks.get('mind_status_update')): 
+                mind_text = "MIND: RDY" if ollama_ready else "MIND: ERR-CHK" 
                 mind_type = "ready" if ollama_ready else "error"
                 gui_callbacks['mind_status_update'](mind_text, mind_type)
     finally:
@@ -265,6 +256,12 @@ def handle_web_admin_interaction_result(bridge_result_data: dict):
             applied_font_size_value = clamped_font_size_suggestion
         llm_provided_user_state_changes["chat_font_size"] = applied_font_size_value
 
+        # Ensure 'todos' from admin is not processed
+        if "todos" in llm_provided_user_state_changes:
+            del llm_provided_user_state_changes["todos"]
+            logger.warning("MAIN: WebAppBridge tried to update 'todos' for admin state via LLM. This key is ignored.")
+
+
         with global_states_lock:
             merged_user_state = user_state_snapshot.copy()
             merged_user_state.update(llm_provided_user_state_changes)
@@ -279,16 +276,23 @@ def handle_web_admin_interaction_result(bridge_result_data: dict):
             if "internal_tasks" in llm_provided_assistant_state_changes and isinstance(llm_provided_assistant_state_changes["internal_tasks"], dict):
                 llm_tasks_dict = llm_provided_assistant_state_changes["internal_tasks"]
                 if "internal_tasks" not in merged_assistant_state or not isinstance(merged_assistant_state.get("internal_tasks"), dict):
-                    merged_assistant_state["internal_tasks"] = {"pending": [], "in_process": [], "completed": []}
-                for task_type in ["pending", "in_process", "completed"]:
-                    if task_type not in merged_assistant_state["internal_tasks"] or not isinstance(merged_assistant_state["internal_tasks"][task_type], list):
-                        merged_assistant_state["internal_tasks"][task_type] = []
+                    merged_assistant_state["internal_tasks"] = {"pending": [], "completed": []} # Initialize with new structure
+                
+                for task_type in ["pending", "completed"]: # Only process these two
+                    if task_type not in merged_assistant_state["internal_tasks"] or not isinstance(merged_assistant_state["internal_tasks"].get(task_type), list):
+                        merged_assistant_state["internal_tasks"][task_type] = [] # Ensure list exists
+                    
                     new_tasks_from_llm = llm_tasks_dict.get(task_type, [])
-                    if not isinstance(new_tasks_from_llm, list): new_tasks_from_llm = [str(new_tasks_from_llm)]
+                    if not isinstance(new_tasks_from_llm, list): 
+                        new_tasks_from_llm = [str(new_tasks_from_llm)] if new_tasks_from_llm else []
+                    
                     existing_tasks_in_merged = merged_assistant_state["internal_tasks"][task_type]
                     merged_assistant_state["internal_tasks"][task_type] = list(dict.fromkeys(
                         [str(t) for t in existing_tasks_in_merged] + [str(t) for t in new_tasks_from_llm]
                     ))
+                if "in_process" in llm_tasks_dict:
+                     logger.warning("MAIN: WebAppBridge provided 'in_process' tasks for assistant. This key is now ignored.")
+
             for key, val_llm in llm_provided_assistant_state_changes.items():
                 if key != "internal_tasks":
                     merged_assistant_state[key] = val_llm
@@ -317,18 +321,21 @@ def handle_web_admin_interaction_result(bridge_result_data: dict):
     if gui and gui_callbacks:
         with global_states_lock:
             if callable(gui_callbacks.get('update_chat_display_from_list')): gui_callbacks['update_chat_display_from_list'](chat_history)
-            if callable(gui_callbacks.get('update_todo_list')): gui_callbacks['update_todo_list'](user_state.get("todos", []))
+            # Removed admin todo list update from GUI
             if callable(gui_callbacks.get('update_calendar_events_list')): gui_callbacks['update_calendar_events_list'](user_state.get("calendar_events", []))
+            
             asst_tasks_web = assistant_state.get("internal_tasks", {});
-            if not isinstance(asst_tasks_web, dict): asst_tasks_web = {}
-            if callable(gui_callbacks.get('update_kanban_pending')): gui_callbacks['update_kanban_pending'](asst_tasks_web.get("pending", []))
-            if callable(gui_callbacks.get('update_kanban_in_process')): gui_callbacks['update_kanban_in_process'](asst_tasks_web.get("in_process", []))
-            if callable(gui_callbacks.get('update_kanban_completed')): gui_callbacks['update_kanban_completed'](asst_tasks_web.get("completed", []))
+            if not isinstance(asst_tasks_web, dict): asst_tasks_web = {"pending": [], "completed": []}
+            
+            if callable(gui_callbacks.get('update_kanban_pending')): 
+                gui_callbacks['update_kanban_pending'](asst_tasks_web.get("pending", []))
+            # Removed update_kanban_in_process
+            if callable(gui_callbacks.get('update_kanban_completed')): 
+                gui_callbacks['update_kanban_completed'](asst_tasks_web.get("completed", []))
     logger.info(f"MAIN: WebAppBridge result processing finished.")
 
 
 def start_gui_recording():
-    """Starts GUI audio recording if conditions are met."""
     global gui_callbacks, audio_processor, whisper_handler, tts_manager
     logger.debug("start_gui_recording called.")
 
@@ -355,7 +362,6 @@ def start_gui_recording():
             gui_callbacks['speak_button_update'](speak_btn_ready_for_idle, "Speak" if speak_btn_ready_for_idle else "HEAR NRDY")
 
 def stop_gui_recording_and_process():
-    """Stops GUI audio recording and initiates processing."""
     global gui_callbacks, audio_processor
     logger.debug("stop_gui_recording_and_process called.")
 
@@ -398,8 +404,6 @@ def on_app_exit():
     if tts_manager.TTS_CAPABLE: logger.info("Shutting down TTS module..."); tts_manager.full_shutdown_tts_module()
     if whisper_handler.WHISPER_CAPABLE: logger.info("Cleaning up Whisper model..."); whisper_handler.full_shutdown_whisper_module()
 
-    # No explicit shutdown for Flask thread needed with daemon=True, but good practice if it held resources
-    # For Flask dev server, daemon=True is usually enough. Production servers have own shutdown.
     logger.info("Flask thread is daemonized, will exit with main app.")
 
     if gui:
@@ -417,7 +421,7 @@ def _periodic_status_and_task_checker():
     global customer_interaction_manager_instance, llm_task_executor, app_tk_instance, gui_callbacks
 
     if config.ENABLE_WEB_UI and gui_callbacks and callable(gui_callbacks.get('webui_status_update')):
-        webui_text, webui_type = check_webui_health() # This will now reflect SSL status
+        webui_text, webui_type = check_webui_health() 
         gui_callbacks['webui_status_update'](webui_text, webui_type)
 
     if customer_interaction_manager_instance and llm_task_executor and not llm_task_executor._shutdown:
@@ -495,10 +499,10 @@ if __name__ == "__main__":
         config.TELEGRAM_TTS_TEMP_FOLDER, config.CUSTOMER_STATES_FOLDER,
         os.path.join(config.DATA_FOLDER, "temp_dashboards"),
         config.WEB_UI_AUDIO_TEMP_FOLDER, config.WEB_UI_TTS_SERVE_FOLDER,
-        os.path.dirname(config.SSL_CERT_FILE) # Ensure SSL directory exists if specified (e.g. "ssl/")
+        os.path.dirname(config.SSL_CERT_FILE) 
     ]
     for folder_path in folders_to_ensure:
-        if folder_path and not file_utils.ensure_folder(folder_path, gui_callbacks=None): # Check if folder_path is not empty
+        if folder_path and not file_utils.ensure_folder(folder_path, gui_callbacks=None): 
             logger.critical(f"CRITICAL: Failed to create folder '{folder_path}'. Exiting.")
             sys.exit(1)
 
@@ -519,6 +523,11 @@ if __name__ == "__main__":
         except (ValueError, TypeError): initial_font_size_state = config.DEFAULT_CHAT_FONT_SIZE
         current_chat_font_size_applied = max(config.MIN_CHAT_FONT_SIZE, min(initial_font_size_state, config.MAX_CHAT_FONT_SIZE))
         user_state["chat_font_size"] = current_chat_font_size_applied
+        # Ensure admin's 'todos' is not loaded if it somehow existed in the file
+        if "todos" in user_state:
+            del user_state["todos"]
+            logger.info("Removed 'todos' key from loaded admin user_state as it's no longer used.")
+
 
     logger.info("Initializing ThreadPoolExecutor for LLM tasks...")
     llm_task_executor = ThreadPoolExecutor(max_workers=config.LLM_TASK_THREAD_POOL_SIZE, thread_name_prefix="LLMTaskThread")
@@ -563,11 +572,12 @@ if __name__ == "__main__":
             'add_user_message_to_display': 'add_user_message_to_display',
             'add_assistant_message_to_display': 'add_assistant_message_to_display',
             'gpu_status_update_display': 'update_gpu_status_display',
-            'update_todo_list': 'update_todo_list', 'update_calendar_events_list': 'update_calendar_events_list',
+            # 'update_todo_list': 'update_todo_list', # Removed
+            'update_calendar_events_list': 'update_calendar_events_list',
             'apply_application_theme': 'apply_theme', 'apply_chat_font_size': 'apply_chat_font_size',
             'update_chat_display_from_list': 'update_chat_display_from_list',
             'update_kanban_pending': 'update_kanban_pending',
-            'update_kanban_in_process': 'update_kanban_in_process',
+            # 'update_kanban_in_process': 'update_kanban_in_process', # Removed
             'update_kanban_completed': 'update_kanban_completed'
         }
         for cb_key, method_name in callback_mapping.items():
@@ -580,13 +590,17 @@ if __name__ == "__main__":
     if gui and gui_callbacks:
         with global_states_lock:
             if callable(gui_callbacks.get('update_chat_display_from_list')): gui_callbacks['update_chat_display_from_list'](chat_history)
-            if callable(gui_callbacks.get('update_todo_list')): gui_callbacks['update_todo_list'](user_state.get("todos", []))
+            # if callable(gui_callbacks.get('update_todo_list')): gui_callbacks['update_todo_list'](user_state.get("todos", [])) # Removed
             if callable(gui_callbacks.get('update_calendar_events_list')): gui_callbacks['update_calendar_events_list'](user_state.get("calendar_events", []))
+            
             initial_asst_tasks = assistant_state.get("internal_tasks", {});
-            if not isinstance(initial_asst_tasks, dict): initial_asst_tasks = {}
-            if callable(gui_callbacks.get('update_kanban_pending')): gui_callbacks['update_kanban_pending'](initial_asst_tasks.get("pending", []))
-            if callable(gui_callbacks.get('update_kanban_in_process')): gui_callbacks['update_kanban_in_process'](initial_asst_tasks.get("in_process", []))
-            if callable(gui_callbacks.get('update_kanban_completed')): gui_callbacks['update_kanban_completed'](initial_asst_tasks.get("completed", []))
+            if not isinstance(initial_asst_tasks, dict): initial_asst_tasks = {"pending": [], "completed": []}
+            
+            if callable(gui_callbacks.get('update_kanban_pending')): 
+                gui_callbacks['update_kanban_pending'](initial_asst_tasks.get("pending", []))
+            # if callable(gui_callbacks.get('update_kanban_in_process')): gui_callbacks['update_kanban_in_process'](initial_asst_tasks.get("in_process", [])) # Removed
+            if callable(gui_callbacks.get('update_kanban_completed')): 
+                gui_callbacks['update_kanban_completed'](initial_asst_tasks.get("completed", []))
 
     logger.info("Initializing Telegram Bot Handler...")
     if config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_ADMIN_USER_ID:
@@ -626,7 +640,7 @@ if __name__ == "__main__":
         web_logger.info("Web UI is ENABLED. Initializing bridge and Flask thread...")
         web_bridge_instance = WebAppBridge(
             main_app_ollama_ready_flag_getter=lambda: ollama_ready,
-            main_app_status_label_getter_fn=lambda: gui.app_status_label.cget("text") if gui and hasattr(gui, 'app_status_label') and gui.app_status_label and gui.app_status_label.winfo_exists() else "N/A", #type: ignore
+            main_app_status_label_getter_fn=lambda: gui.app_status_label.cget("text") if gui and hasattr(gui, 'app_status_label') and gui.app_status_label and gui.app_status_label.winfo_exists() else "N/A", 
             whisper_handler_module=whisper_handler, ollama_handler_module=ollama_handler,
             tts_manager_module=tts_manager, _whisper_module_for_load_audio_ref=_whisper_module_for_load_audio,
             state_manager_module_ref=state_manager, gui_callbacks_ref=gui_callbacks,
@@ -648,7 +662,6 @@ if __name__ == "__main__":
             protocol_for_log = "http"
             try:
                 if config.ENABLE_WEB_UI_SSL:
-                    # Config paths are relative to project root. main.py runs from project root.
                     cert_path = config.SSL_CERT_FILE
                     key_path = config.SSL_KEY_FILE
 
@@ -668,14 +681,13 @@ if __name__ == "__main__":
                     port=config.WEB_UI_PORT, 
                     debug=False, 
                     use_reloader=False,
-                    ssl_context=ssl_context_to_use # This will be None if SSL is not used
+                    ssl_context=ssl_context_to_use 
                 )
                 web_logger.info("Flask server has stopped.")
             except Exception as e_flask_run:
                 web_logger.critical(f"Flask server CRASHED or failed to start: {e_flask_run}", exc_info=True)
                 if gui_callbacks and callable(gui_callbacks.get('webui_status_update')):
-                    # Update GUI status to reflect crash. Health check might also catch this.
-                    status_text, status_type = check_webui_health() # Re-check to get current state
+                    status_text, status_type = check_webui_health() 
                     gui_callbacks['webui_status_update'](status_text if status_text else "WEBUI: ERR-START", 
                                                          status_type if status_type else "error")
 
