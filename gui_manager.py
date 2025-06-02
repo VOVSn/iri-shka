@@ -223,7 +223,7 @@ class GUIManager:
 
     def _setup_widgets(self):
         logger.debug("Setting up GUI widgets.")
-        self.app_window.title("Iri-shka: Voice AI Assistant")
+        self.app_window.title("Iri-shka: Voice AI Assistant Desktop ver 0.1.1 alha")
         self.app_window.geometry("1150x900")
         main_frame = ttk.Frame(self.app_window, padding="10"); main_frame.pack(expand=True, fill=tk.BOTH)
         self.combined_status_bar_frame = ttk.Frame(main_frame, height=70, relief=tk.GROOVE, borderwidth=1); self.combined_status_bar_frame.pack(fill=tk.X, side=tk.BOTTOM, pady=(5, 0)); self.combined_status_bar_frame.pack_propagate(False)
