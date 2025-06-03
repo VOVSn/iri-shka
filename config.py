@@ -112,7 +112,7 @@ DEFAULT_USER_STATE = {
     "topics_discussed": [],
     "user_sentiment_summary": "positive",
     "preferences": {},
-    "todos": [],
+    # "todos": [], # Removed admin's personal todos
     "calendar_events": [], # Admin's personal/business calendar
     "birthdays": [],
     "gui_theme": GUI_THEME_LIGHT,
@@ -138,11 +138,11 @@ DEFAULT_ASSISTANT_STATE = {
         "thoughtfulness": 0.4, "excitement": 0.1, "surprise": 0.1, "sadness": 0.0,
         "fear": 0.0, "anger": 0.0, "empathy": 0.4, "calmness": 0.5
     },
-    "active_goals": ["Be a helpful partner", "Assist with customer inquiries"],
+    "active_goals": ["Be a helpful partner", "Assist with customer inquiries", "Manage tasks effectively"],
     "knowledge_gaps_identified": [],
     "internal_tasks": {
         "pending": ["Review today's news headlines", "Check for new software updates for myself"],
-        "in_process": ["Summarize the last conversation turn if complex"],
+        # "in_process": ["Summarize the last conversation turn if complex"], # Removed
         "completed": ["Initial system check completed successfully"]
     },
     "session_summary_points": [],
@@ -203,7 +203,7 @@ Instructions for your response and state updates:
     - If {admin_name_value} asks to change chat text size, update "chat_font_size" (integer between {min_font_size_value} and {max_font_size_value}).
 3.  **Update Your State (Iri-shka's `updated_assistant_state`):**
     - If {admin_name_value} asks you to 'call me [New Name]' or states 'my name is [New Name]', update your `admin_name` field in `updated_assistant_state` to `[New Name]`.
-    - Manage your `internal_tasks` as usual.
+    - Manage your `internal_tasks`. If {admin_name_value} gives you a new task (e.g., "remind me to...", "can you find out...", "note this down for later"), add it as a string to the `pending` list in `internal_tasks`. If a task is completed as part of this interaction, move it from `pending` to `completed`. The `internal_tasks` object should have two keys: `pending` (list of strings) and `completed` (list of strings).
 4.  **Handle Customer Context (If `Customer Context Active` is True):**
     - If {admin_name_value}'s request *directly pertains to and requires modification of the Active Customer's state*:
         a. Modify the `Active Customer's Current State` (provided in `active_customer_state_string`).
@@ -214,8 +214,8 @@ Instructions for your response and state updates:
 5.  **Language:** Respond in the language indicated by `{language_instruction}` for `answer_to_user`.
 6.  **General State Management for {admin_name_value} (`updated_user_state`):**
     - Birthdays: "birthdays" list (e.g., `{{"name": "Alice", "date": "03-25"}}`).
-    - Todos: "todos" list (list of strings).
     - Current topic: "current_topic" string.
+    - REMEMBER: {admin_name_value} does NOT have a personal "todos" list in their state. Tasks for you (Iri-shka) go into your `internal_tasks.pending`.
 
 Ensure your entire output is ONLY the specified JSON object.
 """
@@ -234,7 +234,7 @@ Customer's current state file content (note their 'conversation_stage' is likely
 The customer's full interaction sequence that you need to process (this includes the bot's initial greeting and all subsequent text replies from the customer within their recent messaging window):
 {customer_interaction_text_blob}
 
-Your (Iri-shka's) current internal state:
+Your (Iri-shka's) current internal state (note its `internal_tasks` format: `{{"pending": [...], "completed": [...]}}`):
 {assistant_state_string}
 
 IMPORTANT LANGUAGE NOTE: {admin_name_value} prefers to receive summaries and notifications from you in Russian.
@@ -260,7 +260,7 @@ Your tasks:
     - Use a general closing like "Мы с вами скоро свяжемся." You can optionally personalize it slightly using the identified customer name (e.g. {{Имя Клиента}}) and intent if it feels natural.
     - Example: "Спасибо, {{Имя Клиента}}! Мы получили ваш запрос по поводу {{Намерение Клиента}} и скоро с вами свяжемся."
     - If no specific follow-up beyond the initial system acknowledgment is necessary or adds value, output the exact string "NO_CUSTOMER_FOLLOWUP_NEEDED" for this field.
-5.  Update your own `assistant_state`. For example, add a task to `internal_tasks.pending`: "Сообщить {admin_name_value} о контакте от {customer_user_id} ([{{Identified Customer Name}}]) по поводу [{{Identified Intent Summary}}]". Ensure this task is concise.
+5.  Update your own `assistant_state`. Add a task to `internal_tasks.pending`: "Сообщить {admin_name_value} о контакте от {customer_user_id} ([{{Identified Customer Name}}]) по поводу [{{Identified Intent Summary}}]". Ensure this task is concise. Your `internal_tasks` should have `pending` and `completed` lists.
 
 Provide ONLY a valid JSON response with the following structure. Do NOT include any text before or after the JSON object. Ensure the JSON is well-formed.
 

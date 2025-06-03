@@ -1,0 +1,288 @@
+/* webui/static/css/theme-golden-neumorphic.css */
+
+body.theme-golden-neumorphic {
+    background: linear-gradient(135deg, #d4af37, #f4d03f, #d4af37); /* Main gold background */
+    color: #8b4513; /* Default dark brown text */
+    font-family: 'Orbitron', monospace; /* Match the PTT design font */
+}
+
+body.theme-golden-neumorphic .intercom-unit {
+    background: linear-gradient(145deg, #e6c547, #c7a82b); /* Intercom body gold */
+    border-radius: 30px; /* Rounded like PTT design */
+    border: none; /* Neumorphism often avoids harsh borders */
+    box-shadow: 
+        15px 15px 30px rgba(180, 140, 20, 0.35), /* Outer shadow */
+        -15px -15px 30px rgba(255, 220, 120, 0.6), /* Outer highlight */
+        inset 4px 4px 8px rgba(180, 140, 20, 0.2),  /* Inner shadow */
+        inset -4px -4px 8px rgba(255, 230, 150, 0.3); /* Inner highlight */
+    padding: 25px; /* Adjust padding */
+}
+
+body.theme-golden-neumorphic .intercom-unit::before {
+    display: none; /* Remove the default top gloss, neumorphism handles its own light */
+}
+
+body.theme-golden-neumorphic .theme-switch-button {
+    background: #c7a82b; /* Gold button */
+    border: 1px solid #b09020;
+    color: #8b4513; /* Dark brown icon */
+    box-shadow: 3px 3px 6px rgba(180,140,20,0.3), -3px -3px 6px rgba(255,220,120,0.5);
+}
+body.theme-golden-neumorphic .theme-switch-button:active {
+    box-shadow: inset 2px 2px 4px rgba(180,140,20,0.3), inset -2px -2px 4px rgba(255,220,120,0.5);
+}
+
+
+body.theme-golden-neumorphic .brand-label {
+    color: #8b4513;
+    font-size: 16px; /* Slightly larger */
+    font-weight: 700;
+    text-shadow: 1px 1px 2px rgba(255,220,120,0.5), -1px -1px 2px rgba(180,140,20,0.2);
+    margin-bottom: 15px; /* To match PTT title margin */
+}
+
+/* Top Recording LED - re-style to look more like the single 'status-led' from PTT design */
+body.theme-golden-neumorphic .led-indicator { 
+    width: 14px; height: 14px; /* Larger */
+    border-radius: 50%;
+    margin: 0 auto 15px auto; /* Center it like the PTT status LED */
+    position: static; /* Remove absolute positioning to flow in header */
+    transform: none;
+    left: auto; right: auto; top: auto;
+}
+body.theme-golden-neumorphic .led-indicator { /* OFF state */
+    background: linear-gradient(145deg, #b09020, #9a7d1c); /* Dull gold */
+    box-shadow: inset 2px 2px 4px rgba(154,125,28,0.5), inset -2px -2px 4px rgba(230,200,100,0.3);
+}
+body.theme-golden-neumorphic .led-indicator.active { /* ON state - Red for recording */
+    background: radial-gradient(circle, #ff6b6b, #cc5555);
+    box-shadow: 0 0 12px rgba(255, 107, 107, 0.8), 
+                inset 2px 2px 4px rgba(255,150,150,0.4), 
+                inset -1px -1px 2px rgba(180,50,50,0.3);
+    animation: pulse-red-gold 1.5s infinite; /* Reuse existing pulse or a new one */
+}
+
+/* Speaker Grille - style to look like the 'speaker' from PTT design */
+body.theme-golden-neumorphic .speaker-grille {
+    width: 100px; height: 25px; /* PTT speaker dimensions */
+    background: linear-gradient(145deg, #3a321e, #2b2415); /* Dark bronze/brown */
+    border-radius: 12px; /* More rounded */
+    box-shadow: inset 3px 3px 6px rgba(0,0,0,0.7), inset -2px -2px 4px rgba(100,90,70,0.2);
+    padding: 5px; margin-bottom: 10px;
+    overflow: hidden; /* Hide original holes */
+}
+body.theme-golden-neumorphic .speaker-hole {
+    display: none; /* Hide original holes, we use ::before on grille */
+}
+body.theme-golden-neumorphic .speaker-grille::before { /* Simulate PTT speaker lines */
+    content: '';
+    display: block;
+    width: 80%;
+    height: 3px;
+    margin: auto;
+    background: repeating-linear-gradient(90deg, #7a6a4a 0px, #7a6a4a 4px, transparent 4px, transparent 8px);
+}
+
+
+/* Screen Area - Style like 'lcd-display' */
+body.theme-golden-neumorphic .screen-container {
+    background: linear-gradient(145deg, #1a2b1a, #0f1f0f); /* Dark green from PTT */
+    border-radius: 20px; /* Rounded like PTT */
+    border: 3px solid #3a5a3a; /* Darker green border */
+    box-shadow: 
+        inset 6px 6px 12px rgba(0,0,0,0.7),
+        inset -6px -6px 12px rgba(60,90,60,0.2);
+    padding: 10px; /* Adjust padding */
+    margin-bottom: 20px; /* Space before controls */
+    height: 220px; /* Closer to PTT display height */
+}
+body.theme-golden-neumorphic .screen {
+    background: transparent; /* LCD background is the container */
+    color: #00ff00; /* Bright green text */
+    font-size: 13px; /* Slightly larger for LCD feel */
+    line-height: 1.5;
+    text-shadow: 0 0 6px rgba(0, 255, 0, 0.6), 0 0 3px rgba(0,255,0,0.4);
+    padding: 5px; /* Minimal padding inside actual scroll area */
+    scrollbar-color: rgba(0,255,0,0.5) rgba(0,50,0,0.3);
+}
+body.theme-golden-neumorphic .screen::-webkit-scrollbar { width: 7px; }
+body.theme-golden-neumorphic .screen::-webkit-scrollbar-track { background: rgba(0,30,0,0.4); border-radius: 3px;}
+body.theme-golden-neumorphic .screen::-webkit-scrollbar-thumb { background-color: rgba(0,200,0,0.6); border-radius: 3px;}
+
+/* Chat Messages Styling */
+body.theme-golden-neumorphic .screen p { /* General message styling */
+    margin-bottom: 6px;
+    padding: 5px 10px;
+    border-radius: 10px;
+    animation: fadeIn 0.4s ease-out; /* Use existing fadeIn */
+    border: 1px solid rgba(0, 255, 0, 0.2); /* Subtle border */
+    font-weight: 500;
+}
+body.theme-golden-neumorphic .screen .user-message {
+    background: rgba(0, 100, 0, 0.25); /* Darker green for user */
+    text-align: right;
+}
+body.theme-golden-neumorphic .screen .user-message::before { content: "CMD: "; color: #8fbc8f; } /* DarkSeaGreen */
+body.theme-golden-neumorphic .screen .assistant-message {
+    background: rgba(0, 150, 0, 0.2); /* Slightly lighter for assistant */
+    text-align: left;
+}
+body.theme-golden-neumorphic .screen .assistant-message::before { content: "IRI-SHKA: "; color: #98fb98; } /* PaleGreen */
+body.theme-golden-neumorphic .screen .system-message {
+    background: rgba(0,80,0,0.2); color: #66cdaa; /* MediumAquaMarine */ font-style: italic;
+}
+body.theme-golden-neumorphic .screen .error-message {
+    background: rgba(150,0,0,0.3); color: #ff7f7f; /* Light Coral Red */ border-color: rgba(255,0,0,0.3);
+}
+
+@keyframes fadeIn { /* Keep your fadeIn */
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+body.theme-golden-neumorphic .status-log-line { /* Re-style status line at bottom of screen */
+    background: rgba(0,50,0,0.3);
+    color: #00cc00; /* Bright green */
+    border-top: 1px solid rgba(0,100,0,0.4);
+    text-shadow: 0 0 4px rgba(0,255,0,0.5);
+    font-size: 10px; /* Smaller */
+    padding: 2px 8px;
+    height: 20px; line-height: 16px;
+}
+body.theme-golden-neumorphic .cursor { background: #00ff00; box-shadow: 0 0 8px #00ff00; }
+
+/* Controls Section - Style like PTT controls */
+body.theme-golden-neumorphic .controls-section {
+    gap: 25px; /* PTT design gap */
+    margin-bottom: 25px; /* Space before LEDs */
+}
+
+/* Speak Button - Style like 'ptt-button' */
+body.theme-golden-neumorphic .speak-button {
+    width: 110px; height: 110px; /* Slightly larger for PTT feel */
+    background: linear-gradient(145deg, #e6c547, #c7a82b); /* Gold */
+    box-shadow: 
+        10px 10px 20px rgba(180, 140, 20, 0.3), /* Softer neumorphic shadow */
+        -10px -10px 20px rgba(255, 220, 120, 0.5);
+    border: none; /* Remove border for neumorphism */
+    color: #8b4513; /* Dark brown text */
+    text-shadow: 1px 1px 1px rgba(255,220,120,0.4);
+    font-size: 13px;
+    line-height: 1.2; /* For two lines of text */
+}
+body.theme-golden-neumorphic .speak-button:hover {
+    background: linear-gradient(145deg, #f0d860, #d4b83e); /* Lighter gold on hover */
+}
+body.theme-golden-neumorphic .speak-button:active {
+    box-shadow: 
+        inset 6px 6px 12px rgba(180, 140, 20, 0.35),
+        inset -6px -6px 12px rgba(255, 230, 150, 0.25);
+    transform: scale(0.97);
+    color: #6a400a; /* Darker text on press */
+}
+body.theme-golden-neumorphic .speak-button.recording {
+    background: linear-gradient(145deg, #ff7f7f, #e06060); /* Reddish when recording */
+    color: #fff; text-shadow: 0 0 3px #a03030;
+    animation: recordPulsePTT 0.7s infinite alternate; /* PTT specific pulse */
+}
+@keyframes recordPulsePTT { /* New pulse for PTT recording button */
+    0% { transform: scale(1); box-shadow: inset 6px 6px 12px rgba(180,50,50,0.3), inset -6px -6px 12px rgba(255,150,150,0.2);}
+    100% { transform: scale(1.03); box-shadow: inset 4px 4px 8px rgba(180,50,50,0.3), inset -4px -4px 8px rgba(255,150,150,0.2);}
+}
+body.theme-golden-neumorphic .speak-button:disabled {
+    background: linear-gradient(145deg, #d1b871, #b39c5c); /* Muted gold */
+    box-shadow: inset 3px 3px 6px rgba(150,120,60,0.3), inset -3px -3px 6px rgba(220,200,150,0.2);
+    color: #9e834e;
+}
+
+/* Play Button - Style like PTT play button */
+body.theme-golden-neumorphic .play-button {
+    width: 60px; height: 60px; /* PTT play button size */
+    background: linear-gradient(145deg, #e6c547, #c7a82b);
+    box-shadow: 6px 6px 12px rgba(180,140,20,0.3), -6px -6px 12px rgba(255,220,120,0.5);
+    border: none;
+    color: #8b4513; /* Dark brown icon */
+}
+body.theme-golden-neumorphic .play-button:active {
+    box-shadow: inset 4px 4px 8px rgba(180,140,20,0.3), inset -3px -3px 6px rgba(255,220,120,0.2);
+    transform: scale(0.95);
+}
+body.theme-golden-neumorphic .play-button:disabled {
+    background: linear-gradient(145deg, #d1b871, #b39c5c);
+    box-shadow: inset 2px 2px 4px rgba(150,120,60,0.3), inset -2px -2px 4px rgba(220,200,150,0.2);
+    color: #9e834e;
+}
+body.theme-golden-neumorphic .play-icon { border-left-color: #8b4513; }
+body.theme-golden-neumorphic .pause-bar { background-color: #8b4513; }
+
+
+/* Status LED Panel at the bottom */
+body.theme-golden-neumorphic .status-led-panel {
+    background: transparent; /* No separate panel bg for neumorphic */
+    box-shadow: none;
+    gap: 20px; /* Wider gap */
+}
+body.theme-golden-neumorphic .status-led-group {
+    gap: 6px;
+}
+body.theme-golden-neumorphic .status-led { /* Style individual LEDs like PTT .led */
+    width: 12px; height: 12px; /* PTT LED size */
+    background: linear-gradient(145deg, #a08030, #8b6d25); /* Dull, unlit gold */
+    box-shadow: inset 2px 2px 3px rgba(110,90,30,0.6), inset -1px -1px 2px rgba(220,200,130,0.3), 1px 1px 2px rgba(100,70,10,0.2);
+    border:none;
+}
+body.theme-golden-neumorphic .status-led.active { /* Generic active for this theme */
+    background: radial-gradient(circle, #ffe066, #ffd700); /* Bright glowing gold */
+    box-shadow: 0 0 10px rgba(255, 215, 0, 0.7), 0 0 18px rgba(255,215,0,0.5),
+                inset 1px 1px 2px rgba(255,255,200,0.5);
+}
+/* Specific active colors if needed, otherwise generic .active is fine */
+body.theme-golden-neumorphic .status-led.led-ok.active { background: radial-gradient(circle, #90ee90, #32cd32); box-shadow: 0 0 10px #32cd32, inset 1px 1px 2px #ccffcc; } /* LightGreen */
+body.theme-golden-neumorphic .status-led.led-warn.active { background: radial-gradient(circle, #ffa500, #ff8c00); box-shadow: 0 0 10px #ff8c00, inset 1px 1px 2px #ffd080; } /* Orange */
+body.theme-golden-neumorphic .status-led.led-error.active { background: radial-gradient(circle, #ff6347, #ff4500); box-shadow: 0 0 10px #ff4500, inset 1px 1px 2px #ffb3a7; } /* Tomato/OrangeRed */
+
+
+body.theme-golden-neumorphic .led-label {
+    font-size: 11px; /* Larger label */
+    color: #8b4513;
+    font-weight: 700;
+    text-shadow: 1px 1px 1px rgba(255,220,120,0.4);
+}
+
+
+body.theme-golden-neumorphic .status-led { /* Base unlit style for this theme */
+    width: 12px; height: 12px;
+    background: linear-gradient(145deg, #b09050, #91773a); /* Dull, unlit gold/bronze */
+    box-shadow: inset 1px 1px 2px rgba(110,90,30,0.5), inset -1px -1px 1px rgba(200,180,110,0.2), 0px 1px 1px rgba(100,70,10,0.15);
+    border:none;
+    border-radius: 50%; /* Ensure fully round for jewel effect */
+}
+
+body.theme-golden-neumorphic .status-led.led-ok { /* Green for OK */
+    background: radial-gradient(circle, #8fbc8f, #3cb371); /* SeaGreen/MediumSeaGreen */
+    box-shadow: 0 0 8px #3cb371, 0 0 14px #3cb371,
+                inset 1px 1px 2px rgba(200,255,200,0.5),
+                inset -1px -1px 1px rgba(40,120,40,0.3);
+}
+body.theme-golden-neumorphic .status-led.led-warn { /* Amber/Yellow for Warn */
+    background: radial-gradient(circle, #ffbf00, #e6ac00); /* Amber */
+    box-shadow: 0 0 8px #ffbf00, 0 0 14px #ffbf00,
+                inset 1px 1px 2px rgba(255,230,150,0.5),
+                inset -1px -1px 1px rgba(180,130,0,0.3);
+}
+body.theme-golden-neumorphic .status-led.led-error { /* Red for Error */
+    background: radial-gradient(circle, #ff7f7f, #dc143c); /* Crimson / LightCoral */
+    box-shadow: 0 0 8px #dc143c, 0 0 14px #dc143c,
+                inset 1px 1px 2px rgba(255,170,170,0.5),
+                inset -1px -1px 1px rgba(150,20,20,0.3);
+}
+body.theme-golden-neumorphic .status-led.led-off { /* Explicitly OFF */
+    background: linear-gradient(145deg, #a8893a, #8a6d25); /* Slightly different from base unlit */
+    box-shadow: inset 1px 1px 2px rgba(110,90,30,0.4), inset -1px -1px 1px rgba(200,180,110,0.15);
+}
+body.theme-golden-neumorphic .status-led.led-info { /* Goldish-Blue for Info */
+    background: radial-gradient(circle, #6495ed, #4682b4); /* CornflowerBlue to SteelBlue */
+    box-shadow: 0 0 8px #4682b4, 0 0 14px #4682b4,
+                inset 1px 1px 2px rgba(170,200,255,0.5),
+                inset -1px -1px 1px rgba(50,100,150,0.3);
+}

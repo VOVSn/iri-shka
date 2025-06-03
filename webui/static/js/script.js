@@ -1,12 +1,15 @@
 // webui/static/js/script.js
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => { // Make DOMContentLoaded async
+    const bodyElement = document.body;
+    const themeSwitchButton = document.getElementById('themeSwitchButton');
+
     // Intercom UI Elements
     const recordButton = document.getElementById('recordButton');
     const playIrishkaButton = document.getElementById('playIrishkaButton');
     const chatScreen = document.getElementById('chatScreen');
     const recordingLedIndicator = document.getElementById('recordingLedIndicator');
-    const appStatusText = document.getElementById('appStatusText');
     const playIrishkaIcon = document.getElementById('playIrishkaIcon');
+    const screenStatusDisplay = document.getElementById('screenStatusDisplay');
 
     // Status LEDs
     const ollamaLed = document.getElementById('ollamaLed');
@@ -19,23 +22,198 @@ document.addEventListener('DOMContentLoaded', () => {
     let mediaRecorder;
     let audioChunks = [];
     let isRecording = false;
-    let isSpacebarDown = false; // To prevent multiple start attempts from keydown repeat
-    let isMouseDownOnRecordButton = false; // To track button press state
-
+    let isSpacebarDown = false;
+    let isPointerDownOnRecordButton = false;
     let isPlayingIrishka = false;
     let currentIrishkaAudioURL = null;
     let typingInterval = null;
 
-    function init() {
-        // Record Button listeners
-        recordButton.addEventListener('mousedown', handleRecordButtonPress);
-        recordButton.addEventListener('mouseup', handleRecordButtonRelease);
-        // Global listeners to catch mouseup even if it happens outside the button
-        document.addEventListener('mouseup', handleGlobalMouseUp);
-        document.addEventListener('mouseleave', handleGlobalMouseLeave); // Handle if mouse leaves button while pressed
+    // --- Audio Context for Beep/Boop Sounds ---
+    let audioCtx;
+    function getAudioContext() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        return audioCtx;
+    }
+
+    function playTone(frequency, duration = 0.1, type = 'sine', volume = 0.3) {
+        try {
+            const context = getAudioContext();
+            if (!context) {
+                console.warn("Web Audio API not supported, cannot play tone.");
+                return;
+            }
+            // Ensure context is resumed if it was suspended by browser policy
+            if (context.state === 'suspended') {
+                context.resume();
+            }
+
+            const oscillator = context.createOscillator();
+            const gainNode = context.createGain();
+
+            oscillator.type = type;
+            oscillator.frequency.setValueAtTime(frequency, context.currentTime);
+            
+            gainNode.gain.setValueAtTime(volume, context.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.00001, context.currentTime + duration);
 
 
-        // Spacebar listeners
+            oscillator.connect(gainNode);
+            gainNode.connect(context.destination);
+
+            oscillator.start(context.currentTime);
+            oscillator.stop(context.currentTime + duration);
+        } catch (e) {
+            console.error("Error playing tone:", e);
+        }
+    }
+
+    function playStartRecordSound() {
+        playTone(880, 0.08, 'square', 0.2); // Higher pitch, short "beep"
+    }
+
+    function playStopRecordSound() {
+        playTone(440, 0.12, 'triangle', 0.2); // Lower pitch, slightly longer "boop"
+    }
+    // --- End Audio Context ---
+
+
+    // --- Theme Switching Logic ---
+    let themesConfig = [];
+    let currentThemeIndex = 0;
+    const THEME_STORAGE_KEY = 'irishkaWebThemePreference';
+    const loadedCssFiles = new Set();
+
+    async function loadThemesAndInjectCSS() {
+        document.querySelectorAll('link[rel="stylesheet"]').forEach(link => {
+            if (link.href) loadedCssFiles.add(link.href);
+        });
+        try {
+            const response = await fetch('/static/themes.json');
+            if (!response.ok) {
+                console.error('Failed to load themes.json:', response.status);
+                themesConfig = [{ id: "dark", className: "theme-dark", displayName: "Dark", cssFile: "/static/css/style.css", buttonIcon: "☀️" }];
+            } else {
+                themesConfig = await response.json();
+            }
+            if (!Array.isArray(themesConfig) || themesConfig.length === 0) {
+                console.error('themes.json is empty or not an array. Using default.');
+                themesConfig = [{ id: "dark", className: "theme-dark", displayName: "Dark", cssFile: "/static/css/style.css", buttonIcon: "☀️" }];
+            }
+            themesConfig.forEach(theme => {
+                if (theme.cssFile) {
+                    const absoluteCssPath = new URL(theme.cssFile, window.location.origin).href;
+                    if (!loadedCssFiles.has(absoluteCssPath)) {
+                        const link = document.createElement('link');
+                        link.rel = 'stylesheet'; link.type = 'text/css'; link.href = theme.cssFile; link.id = `theme-css-${theme.id}`;
+                        document.head.appendChild(link);
+                        loadedCssFiles.add(absoluteCssPath);
+                        console.log(`Dynamically loaded CSS for theme: ${theme.displayName} from ${theme.cssFile}`);
+                    } else {
+                        console.log(`CSS for theme ${theme.displayName} (${theme.cssFile}) already loaded or linked in HTML.`);
+                    }
+                }
+            });
+        } catch (error) {
+            console.error('Error fetching or processing themes.json:', error);
+            themesConfig = [{ id: "dark", className: "theme-dark", displayName: "Dark", cssFile: "/static/css/style.css", buttonIcon: "☀️" }];
+            const fallbackCssPath = new URL(themesConfig[0].cssFile, window.location.origin).href;
+            if (!loadedCssFiles.has(fallbackCssPath)) {
+                const link = document.createElement('link');
+                link.rel = 'stylesheet'; link.type = 'text/css'; link.href = themesConfig[0].cssFile;
+                document.head.appendChild(link);
+                loadedCssFiles.add(fallbackCssPath);
+            }
+        }
+    }
+
+    function applyThemeById(themeId) {
+        const theme = themesConfig.find(t => t.id === themeId);
+        if (theme) {
+            themesConfig.forEach(t => {
+                if (t.className) bodyElement.classList.remove(t.className);
+            });
+            if (theme.className) bodyElement.classList.add(theme.className);
+            localStorage.setItem(THEME_STORAGE_KEY, theme.id);
+            currentThemeIndex = themesConfig.indexOf(theme);
+            updateThemeButton();
+            console.log(`Theme changed to: ${theme.displayName} (Class: ${theme.className})`);
+        } else {
+            console.warn(`Theme ID "${themeId}" not found. Applying default.`);
+            if (themesConfig.length > 0) applyThemeByIndex(0);
+        }
+    }
+    function applyThemeByIndex(index) {
+        if (themesConfig.length > 0 && index >= 0 && index < themesConfig.length) {
+            applyThemeById(themesConfig[index].id);
+        } else if (themesConfig.length > 0) {
+            applyThemeById(themesConfig[0].id);
+        }
+    }
+    function cycleTheme() {
+        if (themesConfig.length === 0) return;
+        currentThemeIndex = (currentThemeIndex + 1) % themesConfig.length;
+        applyThemeByIndex(currentThemeIndex);
+    }
+    function updateThemeButton() {
+        if (themeSwitchButton && themesConfig.length > 0 && currentThemeIndex < themesConfig.length) {
+            const nextThemeIndex = (currentThemeIndex + 1) % themesConfig.length;
+            const nextTheme = themesConfig[nextThemeIndex];
+            themeSwitchButton.textContent = nextTheme.buttonIcon || 'T';
+            themeSwitchButton.title = `Switch to ${nextTheme.displayName}`;
+        } else if (themeSwitchButton) {
+            themeSwitchButton.textContent = 'T';
+            themeSwitchButton.title = 'Switch Theme';
+        }
+    }
+    async function initializeThemingAndApp() {
+        await loadThemesAndInjectCSS();
+        const savedThemeId = localStorage.getItem(THEME_STORAGE_KEY);
+        let themeAppliedFromStorage = false;
+        if (savedThemeId) {
+            const themeExists = themesConfig.some(t => t.id === savedThemeId);
+            if (themeExists) {
+                applyThemeById(savedThemeId);
+                themeAppliedFromStorage = true;
+            } else {
+                localStorage.removeItem(THEME_STORAGE_KEY);
+            }
+        }
+        if (!themeAppliedFromStorage && themesConfig.length > 0) {
+            applyThemeByIndex(0);
+        } else if (themesConfig.length === 0) {
+            console.error("No themes configured or loaded.");
+            bodyElement.classList.add("theme-dark"); 
+            if (themeSwitchButton) themeSwitchButton.style.display = 'none';
+        }
+        if (themeSwitchButton && themesConfig.length > 1) {
+            themeSwitchButton.addEventListener('click', cycleTheme);
+        } else if (themeSwitchButton) {
+            themeSwitchButton.style.display = 'none';
+        }
+        initAppCoreLogic();
+    }
+    // --- End Theme Switching Logic ---
+
+    function setStatusDisplay(message) {
+        const upperMessage = message ? message.toUpperCase() : "STATUS UNKNOWN";
+        if (screenStatusDisplay) {
+            screenStatusDisplay.textContent = upperMessage;
+        }
+    }
+
+    function initAppCoreLogic() {
+        recordButton.addEventListener('mousedown', handlePointerDownOnButton);
+        recordButton.addEventListener('mouseup', handlePointerUpOffButton);
+        recordButton.addEventListener('touchstart', handlePointerDownOnButton, { passive: false });
+        recordButton.addEventListener('touchend', handlePointerUpOffButton);
+        recordButton.addEventListener('touchcancel', handlePointerUpOffButton);
+
+        document.addEventListener('mouseup', handleGlobalPointerUp);
+        document.addEventListener('touchend', handleGlobalPointerUp);
+        document.addEventListener('touchcancel', handleGlobalPointerUp);
+        
         document.addEventListener('keydown', handleSpacebarDown);
         document.addEventListener('keyup', handleSpacebarUp);
 
@@ -44,83 +222,80 @@ document.addEventListener('DOMContentLoaded', () => {
         irishkaAudioPlayback.onplay = () => {
             isPlayingIrishka = true;
             playIrishkaButton.classList.add('playing');
-            playIrishkaIcon.innerHTML = '<div class="pause-icon"><div class="pause-bar"></div><div class="pause-bar"></div></div>';
-            appStatusText.textContent = "PLAYING IRISHKA...";
+            if (playIrishkaIcon) playIrishkaIcon.innerHTML = '<div class="pause-icon"><div class="pause-bar"></div><div class="pause-bar"></div></div>';
+            setStatusDisplay("PLAYING RESPONSE...");
         };
         irishkaAudioPlayback.onpause = () => {
             isPlayingIrishka = false;
             playIrishkaButton.classList.remove('playing');
-            playIrishkaIcon.innerHTML = '';
-            playIrishkaIcon.className = 'play-icon';
-            if (appStatusText.textContent === "PLAYING IRISHKA...") {
-                 // appStatusText.textContent = "READY"; // Or "RESPONSE READY"
-                 // Let fetchAndUpdateStatus handle this or onended
+            if (playIrishkaIcon) {
+                playIrishkaIcon.innerHTML = '';
+                playIrishkaIcon.className = 'play-icon';
             }
         };
         irishkaAudioPlayback.onended = () => {
-            // onpause handles visual state reset for the button icon
             console.log("Irishka audio finished playing.");
-            if (appStatusText.textContent === "PLAYING IRISHKA...") {
-                appStatusText.textContent = "RESPONSE READY"; // Indicate audio can be replayed
+            if (screenStatusDisplay.textContent === "PLAYING RESPONSE..." || screenStatusDisplay.textContent === "PLAYBACK PAUSED") {
+                setStatusDisplay("RESPONSE READY");
             }
         };
         irishkaAudioPlayback.onerror = (e) => {
             isPlayingIrishka = false;
             playIrishkaButton.classList.remove('playing');
-            playIrishkaIcon.innerHTML = '';
-            playIrishkaIcon.className = 'play-icon';
+            if (playIrishkaIcon) {
+                playIrishkaIcon.innerHTML = '';
+                playIrishkaIcon.className = 'play-icon';
+            }
             console.error("Error with Irishka audio playback:", e, irishkaAudioPlayback.error);
             let errorDetail = getMediaErrorDetail(irishkaAudioPlayback.error);
             typeTextOnScreen(`[AUDIO PLAYBACK ERROR: ${errorDetail}]`, 'error-message fast');
-            appStatusText.textContent = `AUDIO ERR: ${errorDetail}`;
+            setStatusDisplay(`AUDIO ERR: ${errorDetail}`);
         };
 
-        typeTextOnScreen("IRISHKA AI WEB INTERFACE ONLINE. STANDBY...", "system-message", () => {
-            appStatusText.textContent = "STANDBY";
+        typeTextOnScreen("IRISHKA AI: ONLINE", "system-message", () => {
             fetchAndUpdateStatus();
             setInterval(fetchAndUpdateStatus, 4000);
         });
-    }
-
-    function handleRecordButtonPress(event) {
-        if (event.button === 0) { // Main (left) mouse button
-            isMouseDownOnRecordButton = true;
-            if (!isRecording) {
-                startRecording();
-            }
-        }
-    }
-
-    function handleRecordButtonRelease(event) {
-        if (event.button === 0) { // Main (left) mouse button
-            isMouseDownOnRecordButton = false;
-            if (isRecording) {
-                stopRecording();
-            }
+        if (!screenStatusDisplay.textContent || screenStatusDisplay.textContent.toUpperCase() === "INITIALIZING...") {
+             setStatusDisplay("AWAITING SYSTEM STATUS...");
         }
     }
     
-    function handleGlobalMouseUp(event) {
-        // If mouse was down on the button and now it's up (anywhere)
-        if (event.button === 0 && isMouseDownOnRecordButton) {
-            isMouseDownOnRecordButton = false;
-            if (isRecording) {
-                stopRecording();
-            }
+    function handlePointerDownOnButton(event) {
+        if (event.type === 'mousedown' && event.button !== 0) return;
+        if (event.cancelable) event.preventDefault();
+        // Attempt to resume audio context on user interaction
+        const context = getAudioContext();
+        if (context && context.state === 'suspended') {
+            context.resume();
         }
-    }
-    function handleGlobalMouseLeave(event) {
-        // If mouse was down on the button and leaves the button area
-        if (isMouseDownOnRecordButton && event.target === recordButton) {
-            // Optional: could stop recording if mouse leaves button, or let global mouseup handle it.
-            // For simplicity, we'll let global mouseup handle it.
-        }
+        isPointerDownOnRecordButton = true;
+        if (!isRecording) startRecording();
     }
 
+    function handlePointerUpOffButton(event) {
+        if (event.type === 'mouseup' && event.button !== 0) return;
+        if (isPointerDownOnRecordButton) {
+            isPointerDownOnRecordButton = false;
+            if (isRecording) stopRecording();
+        }
+    }
+    
+    function handleGlobalPointerUp(event) {
+        if (event.type === 'mouseup' && event.button !== 0) return;
+        if (isPointerDownOnRecordButton) {
+            isPointerDownOnRecordButton = false;
+            if (isRecording) stopRecording();
+        }
+    }
 
     function handleSpacebarDown(event) {
         if (event.key === ' ' || event.code === 'Space') {
-            event.preventDefault(); // Prevent scrolling or other default space actions
+            if(event.cancelable) event.preventDefault();
+            const context = getAudioContext();
+            if (context && context.state === 'suspended') {
+                context.resume();
+            }
             if (!isRecording && !isSpacebarDown) {
                 isSpacebarDown = true;
                 startRecording();
@@ -130,15 +305,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleSpacebarUp(event) {
         if (event.key === ' ' || event.code === 'Space') {
-            isSpacebarDown = false;
-            if (isRecording) {
-                stopRecording();
+            if (isSpacebarDown) {
+                isSpacebarDown = false;
+                if (isRecording) stopRecording();
             }
         }
     }
 
     async function startRecording() {
-        if (isRecording) return; // Already recording
+        if (isRecording) return;
+        playStartRecordSound(); // << PLAY START SOUND
 
         if (isPlayingIrishka) {
             irishkaAudioPlayback.pause();
@@ -146,82 +322,88 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         audioChunks = [];
         currentIrishkaAudioURL = null;
-        playIrishkaButton.disabled = true;
-        playIrishkaButton.classList.remove('playing');
-        playIrishkaIcon.innerHTML = '';
-        playIrishkaIcon.className = 'play-icon';
+        if(playIrishkaButton) playIrishkaButton.disabled = true;
+        if(playIrishkaButton) playIrishkaButton.classList.remove('playing');
+        if (playIrishkaIcon) {
+            playIrishkaIcon.innerHTML = '';
+            playIrishkaIcon.className = 'play-icon';
+        }
+        
+        setStatusDisplay("ACCESSING MICROPHONE...");
 
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const options = { mimeType: 'audio/webm' };
+            const options = { mimeType: 'audio/webm' }; // Consider 'audio/ogg; codecs=opus' for better quality/compression
             mediaRecorder = new MediaRecorder(stream, options);
 
             mediaRecorder.ondataavailable = event => { audioChunks.push(event.data); };
             mediaRecorder.onstop = async () => {
+                // playStopRecordSound() is called in stopRecording() which calls mediaRecorder.stop()
                 const audioBlob = new Blob(audioChunks, { type: options.mimeType });
-                stream.getTracks().forEach(track => track.stop()); // Stop the microphone tracks
+                stream.getTracks().forEach(track => track.stop());
                 
-                // UI update for processing stage
-                recordButton.disabled = true;
-                recordButton.textContent = "PROCESS"; // "PROCESS" or "UPLOADING"
-                appStatusText.textContent = "UPLOADING...";
-                typeTextOnScreen("[SENDING AUDIO TO IRISHKA...]", "system-message fast");
+                if(recordButton) recordButton.disabled = true;
+                if(recordButton) recordButton.textContent = "PROCESS";
+                setStatusDisplay("UPLOADING AUDIO...");
+                typeTextOnScreen("[SENDING AUDIO...]", "system-message fast");
                 
                 await sendAudioToServer(audioBlob);
             };
 
             mediaRecorder.start();
             isRecording = true;
-            recordButton.textContent = "LISTENING"; // Changed from "STOP REC"
-            recordButton.classList.add('recording');
-            recordingLedIndicator.classList.add('active');
-            appStatusText.textContent = "RECORDING...";
+            if(recordButton) recordButton.textContent = "LISTENING";
+            if(recordButton) recordButton.classList.add('recording');
+            if(recordingLedIndicator) recordingLedIndicator.classList.add('active');
+            setStatusDisplay("LISTENING...");
             typeTextOnScreen("[LISTENING...]", "system-message");
 
         } catch (err) {
             console.error('Error accessing microphone:', err);
             typeTextOnScreen(`[MIC ERROR: ${err.message}]`, 'error-message fast');
-            appStatusText.textContent = "MIC ERROR";
-            resetRecordingButton(); // Reset UI if start fails
-            isRecording = false; // Ensure state is correct
-            isSpacebarDown = false; // Reset spacebar state
-            isMouseDownOnRecordButton = false; // Reset mouse state
+            setStatusDisplay(`MIC ERROR: ${err.message.substring(0,30)}...`);
+            playStopRecordSound(); // Play stop sound even if start failed after an attempt
+            resetRecordingButton();
         }
     }
 
     function stopRecording() {
+        if (!isRecording) return; // Only stop if actually recording
+        
         if (mediaRecorder && mediaRecorder.state === "recording") {
+            playStopRecordSound(); // << PLAY STOP SOUND
             mediaRecorder.stop(); // This will trigger mediaRecorder.onstop
+        } else {
+            // If mediaRecorder wasn't in recording state but isRecording was true (e.g. error during start)
+            playStopRecordSound();
         }
-        // Visual reset happens immediately on release,
-        // then onstop will change button to "PROCESS"
-        isRecording = false;
-        recordButton.classList.remove('recording');
-        recordingLedIndicator.classList.remove('active');
-        // Don't call resetRecordingButton() here, as onstop will handle the next state.
-        // If onstop doesn't fire (e.g., error before mediaRecorder.start),
-        // resetRecordingButton should be called in the error handler of startRecording.
-        // If user releases very quickly before ondataavailable and onstop,
-        // resetRecordingButton() in sendAudioToServer's finally block will handle it.
+        
+        isRecording = false; // Set this flag immediately
+        if(recordButton) recordButton.classList.remove('recording');
+        if(recordingLedIndicator) recordingLedIndicator.classList.remove('active');
+        
+        // UI update to "PROCESSING..." will happen in mediaRecorder.onstop
+        // If mediaRecorder.onstop doesn't fire (e.g. stop called before start finished fully),
+        // resetRecordingButton() will be called eventually by sendAudioToServer's finally block or error handlers.
+        if (screenStatusDisplay && screenStatusDisplay.textContent === "LISTENING...") {
+             setStatusDisplay("STOPPING...");
+        }
     }
 
     function resetRecordingButton() {
         isRecording = false; 
         isSpacebarDown = false;
-        isMouseDownOnRecordButton = false;
-        recordButton.disabled = false; // Will be re-evaluated by fetchAndUpdateStatus
-        // Default text, will be updated by fetchAndUpdateStatus based on whisper readiness
-        recordButton.textContent = "SPEAK"; 
-        recordButton.classList.remove('recording');
-        recordingLedIndicator.classList.remove('active');
-        // Let fetchAndUpdateStatus handle the text ("SPEAK" vs "HEAR N/A")
-        // and disabled state based on Whisper readiness
-        fetchAndUpdateStatus(); // Trigger a status update to correctly set button state
+        isPointerDownOnRecordButton = false;
+        if(recordButton) recordButton.disabled = false;
+        if(recordButton) recordButton.textContent = "SPEAK";
+        if(recordButton) recordButton.classList.remove('recording');
+        if(recordingLedIndicator) recordingLedIndicator.classList.remove('active');
+        fetchAndUpdateStatus();
     }
 
     function toggleIrishkaPlayback() {
         if (!currentIrishkaAudioURL) {
-            typeTextOnScreen("[NO AUDIO FROM IRISHKA TO PLAY]", "system-message fast");
+            typeTextOnScreen("[NO AUDIO TO PLAY]", "system-message fast");
             return;
         }
         if (isPlayingIrishka) {
@@ -233,8 +415,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (playPromise !== undefined) {
                 playPromise.catch(error => {
                     console.error("Error attempting to play Irishka audio:", error);
-                    typeTextOnScreen(`[PLAYBACK BLOCKED. CLICK PLAY ICON.]`, 'error-message fast');
-                    appStatusText.textContent = "PLAYBACK BLOCKED";
+                    typeTextOnScreen(`[PLAYBACK BLOCKED]`, 'error-message fast');
+                    setStatusDisplay("PLAYBACK BLOCKED");
                 });
             }
         }
@@ -244,10 +426,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!mediaError) return "Unknown audio error.";
         switch (mediaError.code) {
             case MediaError.MEDIA_ERR_ABORTED: return 'Playback aborted.';
-            case MediaError.MEDIA_ERR_NETWORK: return 'Network error during audio download.';
+            case MediaError.MEDIA_ERR_NETWORK: return 'Network error.';
             case MediaError.MEDIA_ERR_DECODE: return 'Audio decoding error.';
             case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED: return 'Audio format not supported.';
-            default: return 'An unknown audio error occurred.';
+            default: return 'Unknown audio error.';
         }
     }
 
@@ -255,12 +437,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const formData = new FormData();
         formData.append('audio_data', audioBlob, 'user_web_audio.webm');
         currentIrishkaAudioURL = null;
-        playIrishkaButton.disabled = true;
+        if(playIrishkaButton) playIrishkaButton.disabled = true;
+
+        setStatusDisplay("PROCESSING AUDIO...");
 
         try {
-            // appStatusText.textContent = 'PROCESSING...'; // Already set to UPLOADING, then PROCESS in onstop
-            // typeTextOnScreen("[IRISHKA IS THINKING...]", "system-message"); // This will be shown after upload potentially
-
             const response = await fetch('/process_audio', {
                 method: 'POST',
                 body: formData
@@ -272,20 +453,18 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 const errorText = await response.text();
                 console.error(`Server error ${response.status}:`, errorText);
-                typeTextOnScreen(`[SERVER ERROR ${response.status}: ${(errorText || "Unknown server error").substring(0,100)}]`, 'error-message fast');
-                appStatusText.textContent = `SERVER ERR ${response.status}`;
-                // resetRecordingButton(); // Moved to finally
+                typeTextOnScreen(`[SERVER ERROR ${response.status}]`, 'error-message fast');
+                setStatusDisplay(`SERVER ERR ${response.status}`);
                 return;
             }
 
             console.log("Response from server:", responseData);
-             // Type "Irishka is thinking" AFTER upload is confirmed and before processing the response
-            typeTextOnScreen("[IRISHKA IS THINKING...]", "system-message fast");
-
+            typeTextOnScreen("[IRISHKA THINKING...]", "system-message fast");
+            setStatusDisplay("IRISHKA THINKING...");
 
             if (responseData.error) {
                 typeTextOnScreen(`[ERROR: ${responseData.error}]`, 'error-message fast');
-                appStatusText.textContent = "ERROR";
+                setStatusDisplay(`ERROR: ${responseData.error.substring(0,30)}...`);
             } else {
                 const transcription = responseData.user_transcription;
                 if (transcription || transcription === "") {
@@ -294,35 +473,35 @@ document.addEventListener('DOMContentLoaded', () => {
                             typeTextOnScreen(`${responseData.llm_text_response}`, "assistant-message", () => {
                                 if (responseData.audio_url) {
                                     currentIrishkaAudioURL = responseData.audio_url;
-                                    playIrishkaButton.disabled = false;
-                                    appStatusText.textContent = "RESPONSE READY";
+                                    if(playIrishkaButton) playIrishkaButton.disabled = false;
+                                    setStatusDisplay("RESPONSE READY");
                                 } else {
-                                    appStatusText.textContent = "TEXT RESPONSE ONLY";
+                                    setStatusDisplay("TEXT RESPONSE ONLY");
                                 }
                             });
                         } else {
-                             appStatusText.textContent = "READY";
+                             setStatusDisplay("READY");
                         }
                     });
                 } else if (responseData.llm_text_response) {
                      typeTextOnScreen(`${responseData.llm_text_response}`, "assistant-message", () => {
                         if (responseData.audio_url) {
                             currentIrishkaAudioURL = responseData.audio_url;
-                            playIrishkaButton.disabled = false;
+                            if(playIrishkaButton) playIrishkaButton.disabled = false;
                         }
-                        appStatusText.textContent = "RESPONSE RECEIVED";
+                        setStatusDisplay("RESPONSE RECEIVED");
                      });
                 } else {
-                    typeTextOnScreen("[NO RESPONSE DATA RECEIVED]", "system-message fast");
-                    appStatusText.textContent = "EMPTY RESPONSE";
+                    typeTextOnScreen("[NO RESPONSE DATA]", "system-message fast");
+                    setStatusDisplay("EMPTY RESPONSE");
                 }
             }
         } catch (error) {
             console.error('Error sending/processing audio:', error);
-            typeTextOnScreen(`[CLIENT ERROR: ${error.message}]`, 'error-message fast');
-            appStatusText.textContent = "CLIENT ERROR";
+            typeTextOnScreen(`[CLIENT ERROR]`, 'error-message fast');
+            setStatusDisplay(`CLIENT ERROR: ${error.message.substring(0,30)}...`);
         } finally {
-            resetRecordingButton(); // Crucial to reset button state after all processing
+            resetRecordingButton();
         }
     }
 
@@ -332,22 +511,24 @@ document.addEventListener('DOMContentLoaded', () => {
     function typeTextOnScreen(text, typeClass = "system-message", callback, speed = 30) {
         if (typingInterval) {
             clearInterval(typingInterval);
+            const lastTypingMsg = screenMessages.find(m => !m.fullyTyped);
+            if(lastTypingMsg) {
+                const elem = document.getElementById(lastTypingMsg.id);
+                if (elem) elem.textContent = lastTypingMsg.text;
+                lastTypingMsg.fullyTyped = true;
+            }
         }
 
-        const messageEntry = { text: text, type: typeClass, fullyTyped: false, id: `msg-${Date.now()}-${Math.random()}` };
-
+        const messageEntry = { text: text, type: typeClass, fullyTyped: false, id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` };
         screenMessages.push(messageEntry);
         if (screenMessages.length > MAX_SCREEN_MESSAGES) {
             screenMessages.shift();
         }
-
         renderScreenMessages();
 
         let currentMessageElement = document.getElementById(messageEntry.id);
         if (!currentMessageElement) {
-            console.warn("Could not find message element for typing effect, likely scrolled off too fast.");
-            if (callback) callback();
-            return;
+            if (callback) callback(); return;
         }
 
         let charIndex = 0;
@@ -358,35 +539,32 @@ document.addEventListener('DOMContentLoaded', () => {
             if (charIndex < text.length) {
                 currentMessageElement.textContent += text[charIndex];
                 charIndex++;
-                chatScreen.scrollTop = chatScreen.scrollHeight;
+                if (chatScreen) chatScreen.scrollTop = chatScreen.scrollHeight;
             } else {
                 clearInterval(typingInterval);
                 typingInterval = null;
                 messageEntry.fullyTyped = true;
-                let cursorSpan = currentMessageElement.querySelector('.cursor');
-                if(cursorSpan) cursorSpan.remove();
-
                 if (callback) callback();
             }
         }, effectiveSpeed);
     }
 
     function renderScreenMessages() {
+        if (!chatScreen) return;
         chatScreen.innerHTML = '';
         screenMessages.forEach((msg) => {
             const p = document.createElement('p');
             p.id = msg.id;
             p.className = msg.type;
-            p.textContent = msg.fullyTyped ? msg.text : '';
+            p.textContent = msg.fullyTyped ? msg.text : ''; 
             chatScreen.appendChild(p);
         });
         chatScreen.scrollTop = chatScreen.scrollHeight;
     }
 
-
     function setLedStatus(ledElement, statusType) {
         if (!ledElement) return;
-        ledElement.className = 'status-led';
+        ledElement.className = 'status-led'; // Reset
         const statusClass = getStatusClassForLed(statusType);
         if (statusClass) {
             ledElement.classList.add(statusClass);
@@ -396,10 +574,10 @@ document.addEventListener('DOMContentLoaded', () => {
     function getStatusClassForLed(statusTypeStr) {
         if (!statusTypeStr) return 'led-info';
         const s = statusTypeStr.toLowerCase();
-        if (["ready", "polling", "loaded", "saved", "fresh", "idle", "ok_gpu", "ok", "active"].includes(s)) return "led-ok"; // Added "active" for WebUI operational status
+        if (["ready", "polling", "loaded", "saved", "fresh", "idle", "ok_gpu", "ok", "active"].includes(s)) return "led-ok";
         if (["loading", "checking", "pinging", "thinking", "warn", "busy"].includes(s)) return "led-warn";
-        if (["error", "na", "n/a", "timeout", "conn_error", "http_502", "http_other", "initfail", "unreachable", "bad_token", "net_error", "err", "no_token", "no_admin", "err-chk", "unhealthy", "no-conn"].includes(s)) return "led-error"; // Added more error types
-        if (s === "off" || s === "cfg off" || s === "paused" || s === "disabled") return "led-off"; // Added more off/paused types
+        if (["error", "na", "n/a", "timeout", "conn_error", "http_502", "http_other", "initfail", "unreachable", "bad_token", "net_error", "err", "no_token", "no_admin", "err-chk", "unhealthy", "no-conn", "ssl_err"].includes(s)) return "led-error";
+        if (s === "off" || s === "cfg off" || s === "paused" || s === "disabled") return "led-off";
         return "led-info";
     }
 
@@ -407,12 +585,9 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const response = await fetch('/status');
             if (!response.ok) {
-                console.warn('Failed to fetch status from server:', response.status);
-                setLedStatus(ollamaLed, 'error'); setLedStatus(whisperLed, 'error');
-                setLedStatus(barkLed, 'error'); setLedStatus(telegramLed, 'error');
-                if (!appStatusText.textContent.includes("ERROR") && !appStatusText.textContent.includes("PLAYING")) {
-                    appStatusText.textContent = 'STATUS N/A';
-                }
+                console.warn('Failed to fetch status:', response.status);
+                setLedStatus(ollamaLed,'error'); setLedStatus(whisperLed,'error'); setLedStatus(barkLed,'error'); setLedStatus(telegramLed,'error');
+                setStatusDisplay(`STATUS N/A (${response.status})`);
                 return;
             }
             const statusData = await response.json();
@@ -421,35 +596,51 @@ document.addEventListener('DOMContentLoaded', () => {
             setLedStatus(whisperLed, statusData.whisper?.type);
             setLedStatus(barkLed, statusData.bark?.type);
             setLedStatus(telegramLed, statusData.telegram?.type);
-             // Also update the WebUI operational status LED if you add one in HTML
-            // e.g., setLedStatus(document.getElementById('webuiLed'), statusData.webui_operational_status?.type);
 
-
-            const currentAppStatus = appStatusText.textContent.toUpperCase();
-            const nonInterruptingStatuses = ["RECORDING...", "PROCESS", "UPLOADING...", "PLAYING IRISHKA...", "IRISHKA IS THINKING...", "LISTENING..."];
-            if (!nonInterruptingStatuses.includes(currentAppStatus)) {
-                 if (statusData.app_overall_status) {
-                    appStatusText.textContent = statusData.app_overall_status.toUpperCase();
-                 } else {
-                    appStatusText.textContent = "SYSTEM READY";
-                 }
+            const currentSystemStatus = screenStatusDisplay ? screenStatusDisplay.textContent : "";
+            const nonInterruptingStatuses = [
+                "LISTENING...", "STOPPING...", "UPLOADING AUDIO...", "PROCESSING AUDIO...", 
+                "IRISHKA THINKING...", "PLAYING RESPONSE...", "ACCESSING MICROPHONE...",
+                "PLAYBACK BLOCKED", "MIC ERROR",
+            ].map(s => s.toUpperCase());
+            
+            let statusIsInterruptible = true;
+            if (nonInterruptingStatuses.includes(currentSystemStatus) ||
+                currentSystemStatus.startsWith("ERROR:") ||
+                currentSystemStatus.startsWith("SERVER ERR") ||
+                currentSystemStatus.startsWith("CLIENT ERR") ||
+                currentSystemStatus.startsWith("AUDIO ERR")) {
+                statusIsInterruptible = false;
             }
 
-            const whisperIsReady = statusData.whisper?.type === 'ready' || statusData.whisper?.type === 'idle'; // Simplified
-            if (!isRecording && recordButton.textContent.toUpperCase() !== "PROCESS" && recordButton.textContent.toUpperCase() !== "LISTENING") {
+            if (statusIsInterruptible) {
+                 let newStatusText = "SYSTEM READY"; 
+                 if (statusData.app_overall_status) {
+                     newStatusText = statusData.app_overall_status.toUpperCase();
+                 }
+                 setStatusDisplay(newStatusText);
+            }
+            
+            const whisperIsReady = statusData.whisper?.type === 'ready' || statusData.whisper?.type === 'idle';
+            if (recordButton && !isRecording && !isPointerDownOnRecordButton && !isSpacebarDown &&
+                recordButton.textContent.toUpperCase() !== "PROCESS" && 
+                recordButton.textContent.toUpperCase() !== "LISTENING" ) {
                 recordButton.disabled = !whisperIsReady;
                 recordButton.textContent = whisperIsReady ? "SPEAK" : "HEAR N/A";
+                
+                if (statusIsInterruptible) {
+                    setStatusDisplay(whisperIsReady ? "READY" : "HEAR N/A");
+                }
             }
 
         } catch (error) {
             console.error('Error fetching/updating status:', error);
-            setLedStatus(ollamaLed, 'error'); setLedStatus(whisperLed, 'error');
-            setLedStatus(barkLed, 'error'); setLedStatus(telegramLed, 'error');
-            if (!appStatusText.textContent.includes("ERROR") && !appStatusText.textContent.includes("PLAYING")) {
-                appStatusText.textContent = 'STATUS ERR';
-            }
+            setLedStatus(ollamaLed,'error');setLedStatus(whisperLed,'error');setLedStatus(barkLed,'error');setLedStatus(telegramLed,'error');
+            setStatusDisplay('STATUS UPDATE ERROR');
         }
     }
+    
+    // Start the application
+    initializeThemingAndApp();
 
-    init();
-});
+}); // End of DOMContentLoaded

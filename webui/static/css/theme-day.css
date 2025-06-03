@@ -1,0 +1,222 @@
+/* webui/static/css/theme-day.css */
+
+body.theme-day {
+    background: linear-gradient(135deg, #f0f4f8 0%, #e2e8f0 50%, #f0f4f8 100%); /* Brighter, cooler light grey */
+    color: #1a202c; /* Darker base text for high contrast */
+}
+
+body.theme-day .intercom-unit {
+    background: linear-gradient(145deg, #ffffff 0%, #f7fafc 50%, #edf2f7 100%); /* Whiter intercom */
+    border: 3px solid #cbd5e0; /* Clearer, slightly darker border */
+    box-shadow: 
+        0 10px 25px rgba(0, 0, 0, 0.1), /* Softer but visible shadow */
+        inset 0 1px 2px rgba(0, 0, 0, 0.06),
+        inset 0 -1px 1px rgba(255, 255, 255, 0.7);
+}
+
+body.theme-day .intercom-unit::before {
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.02) 0%, transparent 100%); /* Very subtle top gloss */
+}
+
+body.theme-day .brand-label {
+    color: #2d3748; /* Dark grey, almost black */
+    text-shadow: 0 1px 0px rgba(255, 255, 255, 0.6); 
+}
+
+/* --- RECORD LED --- */
+body.theme-day .led-indicator { /* Top recording LED - OFF state */
+    background: #b8c2cc; /* Medium grey, clearly visible */
+    border: 1px solid #a0aec0;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2), 0 0 1px rgba(0,0,0,0.1);
+}
+body.theme-day .led-indicator.active { /* Recording LED - ON state (Red for universal indication) */
+    background: radial-gradient(circle, #e53e3e, #c53030); /* Strong red */
+    box-shadow: 
+        0 0 8px #e53e3e,
+        0 0 15px #e53e3e,
+        inset 0 1px 2px rgba(255, 150, 150, 0.5), /* Lighter red inset for depth */
+        0 0 4px #b72b2b;
+    border: 1px solid #a52a2a; /* Dark red border */
+}
+
+/* --- SPEAKER GRILL --- */
+body.theme-day .speaker-grille {
+    background: #cbd5e0; /* Medium grey, contrasting with white body */
+    box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.15);
+}
+body.theme-day .speaker-hole {
+    background: #718096; /* Darker grey for holes, creating strong contrast */
+    box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.2);
+}
+
+body.theme-day .screen-container {
+    background: #e2e8f0; /* Light grey, distinct from intercom body */
+    border: 4px solid #a0aec0; /* Stronger border */
+    box-shadow: 
+        inset 0 3px 8px rgba(0, 0, 0, 0.12),
+        0 1px 2px rgba(0, 0, 0, 0.08);
+}
+body.theme-day .screen {
+    background: #f7fafc; /* Off-white, very light */
+    color: #1a202c; /* Dark text */
+    text-shadow: none;
+    scrollbar-color: #a0aec0 #e2e8f0; /* Contrasting scrollbar */
+}
+body.theme-day .screen::-webkit-scrollbar-track { background: #e2e8f0; }
+body.theme-day .screen::-webkit-scrollbar-thumb { background-color: #a0aec0; }
+
+body.theme-day .screen .user-message { color: #2c5282; /* Dark blue for user */ }
+body.theme-day .screen .user-message::before { content: "YOU: "; font-weight: bold; color: #4a5568; }
+body.theme-day .screen .assistant-message { color: #2f855a; /* Dark, clear green for assistant */ }
+body.theme-day .screen .assistant-message::before { content: "IRISHKA: "; font-weight: bold; color: #4a5568;}
+body.theme-day .screen .system-message { color: #718096; /* Medium grey for system */ }
+body.theme-day .screen .error-message { color: #c53030; /* Strong red for errors */ }
+
+body.theme-day .screen::before { /* Scanlines - very subtle */
+    background: repeating-linear-gradient(0deg,transparent,transparent 1px,rgba(0,0,0,0.015) 1px,rgba(0,0,0,0.015) 2px);
+    opacity: 0.6;
+}
+body.theme-day .status-log-line {
+    background-color: #e2e8f0; /* Matches screen container bg */
+    color: #4a5568; /* Dark grey, readable */
+    border-top: 1px solid #cbd5e0; /* Clear separator */
+    text-shadow: none;
+}
+body.theme-day .cursor { background: #2f855a; box-shadow: none; } /* Dark green cursor */
+
+/* --- BUTTONS --- */
+body.theme-day .speak-button {
+    background: linear-gradient(145deg, #4299e1 0%, #3182ce 50%, #2b6cb0 100%); /* Vibrant Blue */
+    border: 3px solid #2c5282; /* Darker blue border */
+    color: #ffffff; /* WHITE TEXT for high contrast */
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); /* Subtle shadow for text */
+    box-shadow: 
+        0 8px 15px rgba(43, 108, 176, 0.25), /* Softer color shadow */
+        inset 0 2px 3px rgba(255, 255, 255, 0.4),
+        inset 0 -2px 3px rgba(0, 0, 0, 0.1);
+}
+body.theme-day .speak-button:hover {
+    background: linear-gradient(145deg, #63b3ed 0%, #4299e1 50%, #3182ce 100%);
+    box-shadow: 0 10px 20px rgba(43,108,176,0.3), inset 0 2px 4px rgba(255,255,255,0.5), inset 0 -2px 4px rgba(0,0,0,0.15);
+}
+body.theme-day .speak-button:active {
+    background: linear-gradient(145deg, #2b6cb0, #2c5282 50%, #2a4365);
+    box-shadow: inset 0 3px 6px rgba(0,0,0,0.2);
+}
+body.theme-day .speak-button:disabled {
+    background: linear-gradient(145deg, #e2e8f0, #cbd5e0 50%, #a0aec0);
+    border-color: #a0aec0;
+    color: #718096; /* Darker grey disabled text */
+    text-shadow: none;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+}
+body.theme-day .speak-button.recording { /* Red pulse for recording is universal */
+    animation: pulse-red 1.5s infinite; 
+}
+
+body.theme-day .play-button {
+    background: linear-gradient(145deg, #48bb78 0%, #38a169 50%, #2f855a 100%); /* Vibrant Green */
+    border: 3px solid #276749; /* Darker green border */
+    color: #ffffff; /* WHITE TEXT */
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    box-shadow: 
+        0 8px 15px rgba(47, 133, 90, 0.25),
+        inset 0 2px 3px rgba(255, 255, 255, 0.4),
+        inset 0 -2px 3px rgba(0, 0, 0, 0.1);
+}
+body.theme-day .play-button:hover {
+    background: linear-gradient(145deg, #68d391 0%, #48bb78 50%, #38a169 100%);
+}
+body.theme-day .play-button:active {
+    background: linear-gradient(145deg, #2f855a, #276749 50%, #22543d);
+}
+body.theme-day .play-button:disabled {
+    background: linear-gradient(145deg, #e2e8f0, #cbd5e0 50%, #a0aec0);
+    border-color: #a0aec0;
+    color: #718096;
+    opacity: 0.7; /* Slightly more opaque when disabled */
+}
+body.theme-day .play-button.playing { /* Green pulse for playing is universal */
+    animation: pulse-green 2s infinite;
+}
+/* Make sure icons inside play button are visible */
+body.theme-day .play-icon { border-left-color: #ffffff; }
+body.theme-day .pause-bar { background-color: #ffffff; }
+
+
+body.theme-day .status-led-panel {
+    background: rgba(0, 0, 0, 0.04); 
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.08);
+}
+body.theme-day .led-label {
+    color: #4a5568; /* Darker, readable labels */
+}
+
+/* LED colors for Day theme - making them pop more on light background */
+body.theme-day .status-led { 
+    border: 1px solid rgba(0,0,0,0.15); /* Common border for all LEDs */
+}
+body.theme-day .status-led.led-ok { 
+    background-color: #38a169; /* Darker, rich green */
+    box-shadow: 0 0 6px #38a169, 0 0 10px #38a169, inset 0 1px 1px rgba(255,255,255,0.5);
+    border-color: #2f855a;
+}
+body.theme-day .status-led.led-warn { 
+    background-color: #dd6b20; /* Rich orange/amber */
+    box-shadow: 0 0 6px #dd6b20, 0 0 10px #dd6b20, inset 0 1px 1px rgba(255,255,255,0.5);
+    border-color: #c05621;
+}
+body.theme-day .status-led.led-error { 
+    background-color: #c53030; /* Strong red */
+    box-shadow: 0 0 6px #c53030, 0 0 10px #c53030, inset 0 1px 1px rgba(255,255,255,0.5);
+    border-color: #9b2c2c;
+}
+body.theme-day .status-led.led-off { 
+    background-color: #a0aec0; /* Medium-Light grey for off */
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+    border-color: #718096;
+}
+body.theme-day .status-led.led-info { 
+    background-color: #3182ce; /* Strong blue */
+    box-shadow: 0 0 6px #3182ce, 0 0 10px #3182ce, inset 0 1px 1px rgba(255,255,255,0.5);
+    border-color: #2b6cb0;
+}
+
+/* Theme switch button specific for day theme if different from dark */
+body.theme-day .theme-switch-button {
+    background-color: rgba(200, 210, 220, 0.7);
+    border-color: rgba(160, 170, 180, 0.9);
+    color: #2d3748; /* Dark icon color */
+}
+/* LED colors for Day theme - making them pop more on light background */
+body.theme-day .status-led { /* Base unlit style for this theme */
+    background-color: #e2e8f0; /* Light grey, slightly darker than panel */
+    border: 1px solid #cbd5e0;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+}
+
+body.theme-day .status-led.led-ok { /* Green for OK/Ready/Active */
+    background-color: #38a169; 
+    box-shadow: 0 0 7px #38a169, 0 0 12px #38a169, inset 0 1px 1px rgba(255,255,255,0.5);
+    border-color: #2f855a;
+}
+body.theme-day .status-led.led-warn { /* Rich orange/amber for Warning */
+    background-color: #dd6b20; 
+    box-shadow: 0 0 7px #dd6b20, 0 0 12px #dd6b20, inset 0 1px 1px rgba(255,255,255,0.5);
+    border-color: #c05621;
+}
+body.theme-day .status-led.led-error { /* Strong red for Error */
+    background-color: #c53030; 
+    box-shadow: 0 0 7px #c53030, 0 0 12px #c53030, inset 0 1px 1px rgba(255,255,255,0.5);
+    border-color: #9b2c2c;
+}
+body.theme-day .status-led.led-off { /* Explicitly OFF state - distinct from unlit */
+    background-color: #a0aec0; 
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+    border-color: #718096;
+}
+body.theme-day .status-led.led-info { /* Strong blue for Info */
+    background-color: #3182ce; 
+    box-shadow: 0 0 7px #3182ce, 0 0 12px #3182ce, inset 0 1px 1px rgba(255,255,255,0.5);
+    border-color: #2b6cb0;
+}

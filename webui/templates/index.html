@@ -4,65 +4,61 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Irishka AI Intercom</title>
-    <!-- Link to your existing style.css which will be modified -->
+    <!-- 
+        Theme CSS files will be loaded dynamically by JavaScript based on themes.json.
+        You might include a very small base.css here if absolutely necessary for FOUC mitigation,
+        but for this setup, dynamic loading is the primary method.
+    -->
+    <!-- Example: Link to your main style.css if it contains base styles + the first theme -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
-<body>
+<body> <!-- JavaScript will add theme class e.g., class="theme-dark" -->
     <div class="intercom-unit">
-        <div class="brand-label">IRISHKA AI</div> <!-- Changed Brand -->
-        <div class="led-indicator" id="recordingLedIndicator"></div> <!-- For recording status -->
-        
-        <div class="speaker-grille">
-            <!-- Speaker holes remain the same -->
-            <div class="speaker-hole"></div><div class="speaker-hole"></div><div class="speaker-hole"></div>
-            <div class="speaker-hole"></div><div class="speaker-hole"></div><div class="speaker-hole"></div>
-            <div class="speaker-hole"></div><div class="speaker-hole"></div><div class="speaker-hole"></div>
-            <div class="speaker-hole"></div><div class="speaker-hole"></div><div class="speaker-hole"></div>
-            <div class="speaker-hole"></div><div class="speaker-hole"></div><div class="speaker-hole"></div>
-        </div>
-        
-        <div class="screen-container">
-            <div class="screen" id="chatScreen"> <!-- Renamed for clarity -->
-                <div>SYSTEM BOOTING...</div>
-                <div><span class="cursor"></span></div>
+        <div class="intercom-header-area">
+            <button class="theme-switch-button" id="themeSwitchButton" title="Switch Theme">T</button>
+            <div class="brand-label">IRISHKA AI</div>
+            <div class="led-indicator" id="recordingLedIndicator"></div>
+            <div class="speaker-grille">
+                <div class="speaker-hole"></div><div class="speaker-hole"></div><div class="speaker-hole"></div>
+                <div class="speaker-hole"></div><div class="speaker-hole"></div><div class="speaker-hole"></div>
+                <div class="speaker-hole"></div><div class="speaker-hole"></div><div class="speaker-hole"></div>
+                <div class="speaker-hole"></div><div class="speaker-hole"></div><div class="speaker-hole"></div>
+                <div class="speaker-hole"></div><div class="speaker-hole"></div><div class="speaker-hole"></div>
             </div>
-        </div>
-        
-        <div class="controls-section">
-            <button class="speak-button" id="recordButton"> <!-- Was speakButton, now recordButton -->
-                SPEAK
-            </button>
-            
-            <button class="play-button" id="playIrishkaButton" disabled> <!-- Was playButton, now playIrishkaButton, disabled initially -->
-                <div class="play-icon" id="playIrishkaIcon"></div>
-            </button>
         </div>
 
-        <!-- Hidden Audio Element for Playback -->
-        <audio id="irishkaAudioPlayback" style="display: none;"></audio>
-        
-        <div class="status-led-panel">
-            <div class="status-led-group">
-                <div class="status-led" id="ollamaLed"></div>
-                <span class="led-label">OLLAMA</span>
+        <div class="screen-container">
+            <div class="screen" id="chatScreen">
+                <!-- Chat messages will appear here -->
             </div>
-            <div class="status-led-group">
-                <div class="status-led" id="whisperLed"></div>
-                <span class="led-label">WHISPER</span>
-            </div>
-            <div class="status-led-group">
-                <div class="status-led" id="barkLed"></div>
-                <span class="led-label">BARK</span>
-            </div>
-            <div class="status-led-group">
-                <div class="status-led" id="telegramLed"></div>
-                <span class="led-label">TELEGRAM</span>
-            </div>
+            <div class="status-log-line" id="screenStatusDisplay">INITIALIZING...</div> 
         </div>
         
-        <div class="app-status-text" id="appStatusText">STANDBY</div> <!-- Was statusText, now appStatusText -->
+        <div class="intercom-footer-area">
+            <div class="controls-section">
+                <button class="speak-button" id="recordButton">SPEAK</button>
+                <button class="play-button" id="playIrishkaButton" disabled>
+                    <div class="play-icon" id="playIrishkaIcon"></div>
+                </button>
+            </div>
+            <div class="status-led-panel">
+                <div class="status-led-group">
+                    <div class="status-led" id="ollamaLed"></div><span class="led-label">OLLAMA</span>
+                </div>
+                <div class="status-led-group">
+                    <div class="status-led" id="whisperLed"></div><span class="led-label">WHISPER</span>
+                </div>
+                <div class="status-led-group">
+                    <div class="status-led" id="barkLed"></div><span class="led-label">BARK</span>
+                </div>
+                <div class="status-led-group">
+                    <div class="status-led" id="telegramLed"></div><span class="led-label">TELEGRAM</span>
+                </div>
+            </div>
+        </div>
     </div>
 
+    <audio id="irishkaAudioPlayback" style="display: none;"></audio>
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>
 </html>

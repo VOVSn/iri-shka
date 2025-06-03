@@ -1,0 +1,263 @@
+/* webui/static/css/theme-glassy-future.css */
+
+body.theme-glassy-future {
+    background: #0a001a; /* Deep space blue/purple */
+    background-image: 
+        radial-gradient(ellipse at 30% 20%, rgba(50, 0, 120, 0.5) 0%, transparent 70%),
+        radial-gradient(ellipse at 70% 80%, rgba(0, 50, 150, 0.4) 0%, transparent 70%);
+    color: #e0e0ff; /* Light lavender default text */
+    font-family: 'Orbitron', sans-serif; /* Retain futuristic font */
+}
+
+body.theme-glassy-future .intercom-unit {
+    background: rgba(20, 10, 50, 0.6); /* Translucent deep purple glass */
+    border: 1px solid rgba(120, 80, 220, 0.5); /* Glowing purple edge */
+    border-radius: 25px;
+    box-shadow: 
+        0 0 30px rgba(80, 50, 180, 0.5), /* Outer glow */
+        0 0 10px rgba(150, 100, 255, 0.3),
+        inset 0 0 15px rgba(30, 10, 70, 0.4), /* Inner depth */
+        inset 0 1px 1px rgba(200, 180, 255, 0.2); /* Top edge highlight */
+    backdrop-filter: blur(12px) saturate(150%); /* Glass blur effect */
+    -webkit-backdrop-filter: blur(12px) saturate(150%);
+    padding: 20px;
+}
+
+body.theme-glassy-future .intercom-unit::before { /* Subtle top reflection */
+    background: linear-gradient(180deg, rgba(200, 180, 255, 0.15) 0%, transparent 60%);
+}
+
+body.theme-glassy-future .theme-switch-button {
+    background: rgba(80, 50, 180, 0.7);
+    border-color: rgba(150, 120, 255, 0.8);
+    color: #e0e0ff;
+    box-shadow: 0 0 8px rgba(150,120,255,0.5);
+}
+body.theme-glassy-future .theme-switch-button:hover {
+    background: rgba(100, 70, 200, 0.8);
+}
+
+body.theme-glassy-future .brand-label {
+    color: #c0b0ff; /* Bright lavender */
+    text-shadow: 0 0 8px #a080ff, 0 0 12px #a080ff, 0 0 3px #ffffff; /* Strong glow */
+}
+
+/* Top Recording LED */
+body.theme-glassy-future .led-indicator { /* OFF state */
+    background: rgba(50, 30, 100, 0.7); /* Dim purple */
+    border: 1px solid rgba(100, 70, 180, 0.6);
+    box-shadow: inset 0 0 5px rgba(0,0,0,0.3), 0 0 3px rgba(100,70,180,0.3);
+}
+body.theme-glassy-future .led-indicator.active { /* ON state - Cyber Pink for contrast */
+    background: radial-gradient(circle, #ff00aa, #cc0088);
+    box-shadow: 
+        0 0 10px #ff00aa,
+        0 0 20px #ff00aa,
+        inset 0 0 3px rgba(255,100,200,0.5);
+    border: 1px solid #aa0077;
+}
+
+/* Speaker Grille - styled as a sleek, almost invisible port */
+body.theme-glassy-future .speaker-grille {
+    background: rgba(10, 0, 30, 0.5); /* Very dark, translucent */
+    border-radius: 10px;
+    height: 30px;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.5);
+    padding: 5px;
+}
+body.theme-glassy-future .speaker-hole {
+    background: rgba(80, 50, 150, 0.4); /* Faintly glowing slits */
+    width: 4px; height: 15px;
+    border-radius: 1px;
+    box-shadow: 0 0 2px rgba(120, 80, 200, 0.3);
+}
+
+/* Screen Area - a floating pane of light */
+body.theme-glassy-future .screen-container {
+    background: rgba(30, 20, 80, 0.5); /* Translucent darker purple */
+    border: 1px solid rgba(100, 70, 190, 0.6); /* Glowing edge */
+    border-radius: 15px;
+    box-shadow: 0 0 15px rgba(80, 50, 180, 0.3), inset 0 0 8px rgba(10,0,40,0.3);
+    backdrop-filter: blur(8px) saturate(120%);
+    -webkit-backdrop-filter: blur(8px) saturate(120%);
+    padding: 8px;
+}
+body.theme-glassy-future .screen {
+    background: transparent; /* Fully transparent to see through container */
+    color: #80ffff; /* Bright Cyan text */
+    text-shadow: 0 0 5px #00ffff, 0 0 10px #00dddd, 0 0 2px #fff; /* Strong cyan glow */
+    font-size: 13px;
+    scrollbar-color: rgba(0,200,200,0.6) rgba(10,20,50,0.4);
+}
+body.theme-glassy-future .screen::-webkit-scrollbar-track { background: rgba(10,20,50,0.4); }
+body.theme-glassy-future .screen::-webkit-scrollbar-thumb { background-color: rgba(0,200,200,0.6); border-radius: 3px;}
+
+/* Chat Messages */
+body.theme-glassy-future .screen p {
+    background: rgba(0, 50, 100, 0.3); /* Translucent blue message background */
+    border: 1px solid rgba(0, 150, 200, 0.4);
+    border-radius: 8px;
+    padding: 6px 10px;
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+}
+body.theme-glassy-future .screen .user-message { color: #a0ffff; }
+body.theme-glassy-future .screen .user-message::before { content: "USER> "; color: #00cccc;}
+body.theme-glassy-future .screen .assistant-message { color: #c0b0ff; } /* Lavender for assistant */
+body.theme-golden-neumorphic .screen .assistant-message::before, /* Fix from prev theme if it was there */
+body.theme-glassy-future .screen .assistant-message::before { content: "AI/> "; color: #8a2be2;} /* BlueViolet */
+body.theme-glassy-future .screen .system-message { color: #7080d0; background: rgba(20,20,80,0.3); border-color: rgba(80,80,180,0.4); font-style: normal; } /* SlateBlue */
+body.theme-glassy-future .screen .error-message { color: #ff70b8; background: rgba(100,0,50,0.4); border-color: rgba(200,0,100,0.5); } /* HotPink */
+
+body.theme-glassy-future .status-log-line {
+    background: rgba(10, 5, 40, 0.6);
+    color: #a090f0; /* Light purple status */
+    border-top: 1px solid rgba(80, 60, 160, 0.5);
+    text-shadow: 0 0 4px #a090f0;
+}
+body.theme-glassy-future .cursor { background: #00ffff; box-shadow: 0 0 8px #00ffff, 0 0 12px #00dddd; }
+
+/* Controls - glowing glass buttons */
+body.theme-glassy-future .speak-button,
+body.theme-glassy-future .play-button {
+    border-radius: 50%;
+    border: 1px solid rgba(150, 120, 255, 0.6); /* Outer glow line */
+    color: #e0e0ff; /* Light lavender text/icon */
+    text-shadow: 0 0 5px #a080ff, 0 0 2px #fff;
+    transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease;
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+}
+
+body.theme-glassy-future .speak-button {
+    background: radial-gradient(ellipse at center, rgba(80, 50, 180, 0.7) 0%, rgba(50, 20, 120, 0.85) 100%);
+    box-shadow: 0 0 15px rgba(100, 70, 200, 0.5), 0 0 5px rgba(180,150,255,0.3), inset 0 1px 1px rgba(220,200,255,0.2);
+}
+body.theme-glassy-future .speak-button:hover {
+    background: radial-gradient(ellipse at center, rgba(100, 70, 200, 0.8) 0%, rgba(70, 40, 150, 0.9) 100%);
+    box-shadow: 0 0 20px rgba(120, 90, 220, 0.6), 0 0 8px rgba(200,180,255,0.4), inset 0 1px 1px rgba(230,220,255,0.3);
+}
+body.theme-glassy-future .speak-button:active {
+    background: radial-gradient(ellipse at center, rgba(60, 30, 150, 0.9) 0%, rgba(40, 10, 100, 0.95) 100%);
+    box-shadow: inset 0 0 10px rgba(20,0,60,0.5), 0 0 5px rgba(100,70,200,0.4);
+    transform: scale(0.97);
+}
+body.theme-glassy-future .speak-button.recording {
+    background: radial-gradient(ellipse at center, rgba(255,0,170,0.7) 0%, rgba(204,0,136,0.85) 100%); /* Hot pink */
+    border-color: rgba(255,80,200,0.7);
+    box-shadow: 0 0 15px #ff00aa, 0 0 25px #ff00aa, inset 0 0 5px rgba(255,100,200,0.4);
+    animation: pulse-pink-glow 1.2s infinite ease-in-out;
+}
+@keyframes pulse-pink-glow {
+    0%, 100% { box-shadow: 0 0 15px #ff00aa, 0 0 25px #ff00aa, inset 0 0 5px rgba(255,100,200,0.4); transform: scale(1); }
+    50% { box-shadow: 0 0 20px #ff00aa, 0 0 35px #ff00aa, inset 0 0 8px rgba(255,100,200,0.5); transform: scale(1.03); }
+}
+body.theme-glassy-future .speak-button:disabled {
+    background: rgba(50,30,100,0.5);
+    border-color: rgba(80,60,150,0.4);
+    color: rgba(180,160,230,0.6);
+    box-shadow: inset 0 0 5px rgba(0,0,0,0.3);
+}
+
+
+body.theme-glassy-future .play-button {
+    background: radial-gradient(ellipse at center, rgba(0, 100, 200, 0.7) 0%, rgba(0, 70, 150, 0.85) 100%); /* Bright Blue */
+    box-shadow: 0 0 12px rgba(0, 150, 255, 0.5), 0 0 4px rgba(100,180,255,0.3), inset 0 1px 1px rgba(180,220,255,0.2);
+}
+body.theme-glassy-future .play-button:hover {
+    background: radial-gradient(ellipse at center, rgba(0, 120, 220, 0.8) 0%, rgba(0, 90, 180, 0.9) 100%);
+}
+body.theme-glassy-future .play-button:active {
+    background: radial-gradient(ellipse at center, rgba(0,80,170,0.9) 0%, rgba(0,50,130,0.95) 100%);
+    box-shadow: inset 0 0 8px rgba(0,30,80,0.5);
+}
+body.theme-glassy-future .play-button:disabled {
+    background: rgba(0,50,100,0.5);
+    border-color: rgba(0,80,130,0.4);
+    color: rgba(150,190,230,0.6);
+}
+body.theme-glassy-future .play-icon { border-left-color: #e0e0ff; }
+body.theme-glassy-future .pause-bar { background-color: #e0e0ff; }
+
+
+/* Status LED Panel - Glassy Pills */
+body.theme-glassy-future .status-led-panel {
+    background: rgba(15, 5, 45, 0.5); /* Dark translucent base */
+    border-radius: 15px; /* Rounded panel */
+    padding: 10px 15px;
+    box-shadow: inset 0 0 8px rgba(0,0,0,0.4), 0 0 5px rgba(80,50,180,0.2);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+body.theme-glassy-future .status-led {
+    width: 16px; height: 16px; /* Slightly smaller */
+    border-radius: 8px; /* Pill shape (adjust with padding if needed) */
+    border: 1px solid rgba(120,80,220,0.3);
+    box-shadow: inset 0 0 3px rgba(0,0,0,0.4);
+    position: relative; /* For pseudo-element glow */
+}
+body.theme-glassy-future .status-led::before { /* Inner glow effect */
+    content: '';
+    position: absolute;
+    top: 2px; left: 2px; right: 2px; bottom: 2px;
+    border-radius: 6px;
+    opacity: 0.7;
+    transition: background-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+body.theme-glassy-future .status-led { background-color: rgba(50,30,100,0.5); } /* Default off */
+body.theme-glassy-future .status-led.active::before { box-shadow: 0 0 8px, 0 0 12px; } /* Common active shadow */
+
+body.theme-glassy-future .status-led.led-ok.active::before { background-color: #00ffaa; box-shadow: 0 0 8px #00ffaa, 0 0 12px #00ffaa; } /* Minty green */
+body.theme-glassy-future .status-led.led-warn.active::before { background-color: #ffcc00; box-shadow: 0 0 8px #ffcc00, 0 0 12px #ffcc00; } /* Bright Yellow */
+body.theme-glassy-future .status-led.led-error.active::before { background-color: #ff3385; box-shadow: 0 0 8px #ff3385, 0 0 12px #ff3385; } /* Neon Pink */
+body.theme-glassy-future .status-led.led-info.active::before { background-color: #00ccff; box-shadow: 0 0 8px #00ccff, 0 0 12px #00ccff; } /* Electric Blue */
+body.theme-glassy-future .status-led.led-off::before { background-color: rgba(80,60,130,0.3); }
+
+
+body.theme-glassy-future .led-label {
+    color: #b0a0e0; /* Light purple labels */
+    font-size: 10px;
+    text-shadow: 0 0 3px #8060c0;
+}
+
+
+body.theme-glassy-future .status-led { /* Base unlit state */
+    width: 16px; height: 16px; 
+    border-radius: 8px; /* Pill shape */
+    border: 1px solid rgba(100,70,180,0.2); /* Faint border */
+    background-color: rgba(30,15,60,0.6); /* Dark, slightly transparent purple */
+    box-shadow: inset 0 0 4px rgba(0,0,0,0.5);
+    position: relative;
+}
+body.theme-glassy-future .status-led::before { /* Inner dim glow for unlit state */
+    content: '';
+    position: absolute;
+    top: 2px; left: 2px; right: 2px; bottom: 2px;
+    border-radius: 6px; /* Inner pill */
+    background-color: rgba(80,60,130,0.2); /* Very dim purple */
+    opacity: 0.7;
+    transition: background-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Active state colors using the ::before pseudo-element for the main color/glow */
+body.theme-glassy-future .status-led.led-ok::before { 
+    background-color: #00ffaa; 
+    box-shadow: 0 0 7px #00ffaa, 0 0 11px #00ffaa, 0 0 3px white; 
+}
+body.theme-glassy-future .status-led.led-warn::before { 
+    background-color: #ffdd57; /* Softer Yellow */
+    box-shadow: 0 0 7px #ffdd57, 0 0 11px #ffdd57, 0 0 3px white; 
+}
+body.theme-glassy-future .status-led.led-error::before { 
+    background-color: #ff3860; /* Vibrant Pink/Red */
+    box-shadow: 0 0 7px #ff3860, 0 0 11px #ff3860, 0 0 3px white; 
+}
+body.theme-glassy-future .status-led.led-off::before { /* Explicitly OFF state */
+    background-color: rgba(60,40,100,0.4); /* Slightly more visible than base unlit ::before */
+    box-shadow: none;
+}
+body.theme-glassy-future .status-led.led-info::before { 
+    background-color: #00d1ff; /* Electric Blue */
+    box-shadow: 0 0 7px #00d1ff, 0 0 11px #00d1ff, 0 0 3px white; 
+}
